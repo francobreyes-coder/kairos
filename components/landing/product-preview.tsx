@@ -117,8 +117,8 @@ export function ProductPreview() {
             <p className="text-xs text-muted-foreground">Detailed bios &amp; reviews</p>
           </div>
 
-          {/* Screen 2 — Messaging (elevated) */}
-          <div className="flex flex-col items-center md:-mt-8">
+          {/* Screen 2 — Messaging */}
+          <div className="flex flex-col items-center">
             <IPhoneFrame>
               {/* Chat header */}
               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
@@ -262,49 +262,7 @@ export function ProductPreview() {
           </div>
         </div>
 
-        {/* Tutor profile cards */}
-        <div className="mt-16">
-          <h3 className="text-2xl font-semibold text-foreground text-center mb-8">
-            Meet Your Future Tutors
-          </h3>
-          <div className="grid lg:grid-cols-3 gap-6">
-            {tutorProfiles.map((tutor, index) => (
-              <div
-                key={index}
-                className="rounded-2xl bg-card border border-border p-6 hover:border-accent/30 transition-colors"
-              >
-                <div className="flex items-start gap-4 mb-4">
-                  <div
-                    className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-semibold ${
-                      colorMap[tutor.color].avatar
-                    }`}
-                  >
-                    {tutor.initials}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-foreground">{tutor.name}</h3>
-                    <p className="text-sm text-accent">{tutor.school}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      <span className="text-sm font-medium text-foreground">{tutor.rating}</span>
-                      <span className="text-sm text-muted-foreground">({tutor.reviews} reviews)</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium mb-4 ${
-                    colorMap[tutor.color].badge
-                  }`}
-                >
-                  {tutor.specialty}
-                </div>
-
-                <p className="text-sm text-muted-foreground leading-relaxed">{tutor.bio}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Tutor profile cards — hidden until real tutor data is available */}
 
       </div>
     </section>

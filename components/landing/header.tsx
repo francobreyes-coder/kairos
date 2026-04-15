@@ -4,10 +4,14 @@ import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 
 const navLinks = [
-  { label: 'How It Works', href: '#how-it-works' },
-  { label: 'Preview', href: '#preview' },
-  { label: 'Why Kairos', href: '#why-kairos' },
+  { label: 'How It Works', target: 'how-it-works' },
+  { label: 'Preview', target: 'preview' },
+  { label: 'Why Kairos', target: 'why-kairos' },
 ]
+
+function scrollTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+}
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -27,23 +31,23 @@ export function Header() {
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
-              <a
+              <button
                 key={link.label}
-                href={link.href}
+                onClick={() => scrollTo(link.target)}
                 className="text-muted-foreground hover:text-foreground transition-colors text-sm"
               >
                 {link.label}
-              </a>
+              </button>
             ))}
           </div>
 
           <div className="hidden md:block">
-            <a
-              href="#cta"
+            <button
+              onClick={() => scrollTo('cta')}
               className="inline-flex items-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Join Waitlist
-            </a>
+            </button>
           </div>
 
           {/* Mobile toggle */}
@@ -64,22 +68,20 @@ export function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden pt-4 pb-2 flex flex-col gap-4">
             {navLinks.map((link) => (
-              <a
+              <button
                 key={link.label}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors text-sm"
+                onClick={() => { scrollTo(link.target); setMobileMenuOpen(false) }}
+                className="text-left text-muted-foreground hover:text-foreground transition-colors text-sm"
               >
                 {link.label}
-              </a>
+              </button>
             ))}
-            <a
-              href="#cta"
-              onClick={() => setMobileMenuOpen(false)}
+            <button
+              onClick={() => { scrollTo('cta'); setMobileMenuOpen(false) }}
               className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors mt-2"
             >
               Join Waitlist
-            </a>
+            </button>
           </div>
         )}
       </nav>
