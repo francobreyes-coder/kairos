@@ -74,12 +74,12 @@ export function Hero() {
           <div className="mt-16 flex justify-center">
             <div className="relative">
               {/* iPhone frame */}
-              <div className="relative w-[260px] rounded-[2.5rem] bg-foreground p-2.5 shadow-2xl shadow-foreground/20">
+              <div className="relative w-[260px] h-[560px] rounded-[2.5rem] bg-foreground p-2.5 shadow-2xl shadow-foreground/20">
                 {/* Dynamic Island */}
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-6 bg-foreground rounded-full z-10" />
 
                 {/* Screen */}
-                <div className="relative rounded-[2rem] overflow-hidden bg-card">
+                <div className="relative rounded-[2rem] overflow-hidden bg-card h-full">
                   {/* Status bar */}
                   <div className="flex items-center justify-between px-6 pt-14 pb-3 bg-card">
                     <span className="text-xs font-medium text-foreground">9:41</span>

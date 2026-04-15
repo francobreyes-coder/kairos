@@ -32,7 +32,7 @@ export function Header() {
             </div>
             <span
               className="text-xl leading-none text-foreground select-none"
-              style={{ fontFamily: 'var(--font-playfair)', fontWeight: 700, fontStyle: 'italic', textShadow: '2px 2px 0px rgba(0,0,0,0.12)' }}
+              style={{ fontFamily: 'var(--font-playfair)', fontWeight: 700, fontStyle: 'italic' }}
             >
               kairos
             </span>
