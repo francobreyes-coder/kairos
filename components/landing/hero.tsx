@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { ArrowRight, Sparkles, Star, GraduationCap } from 'lucide-react'
 
 const tutors = [
@@ -11,6 +12,7 @@ const tutors = [
 ]
 
 export function Hero() {
+  const [userType, setUserType] = useState<'student' | 'college'>('student')
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
@@ -41,32 +43,72 @@ export function Hero() {
             Get personalized help with essays, test prep, and activities—from those who know what it takes.
           </p>
 
-          {/* Email waitlist */}
-          {!submitted ? (
-            <form
-              onSubmit={handleSubmit}
-              className="mt-10 flex flex-col sm:flex-row gap-3 w-full max-w-md"
+          {/* User type toggle */}
+          <div className="mt-10 inline-flex rounded-full bg-secondary border border-border p-1">
+            <button
+              type="button"
+              onClick={() => setUserType('student')}
+              className={`px-5 py-2 rounded-full text-sm font-medium transition-colors ${
+                userType === 'student'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="flex-1 h-12 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition"
-              />
-              <button
-                type="submit"
-                className="h-12 px-6 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center gap-2 whitespace-nowrap"
-              >
-                Join Waitlist
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
+              High School Student
+            </button>
+            <button
+              type="button"
+              onClick={() => setUserType('college')}
+              className={`px-5 py-2 rounded-full text-sm font-medium transition-colors ${
+                userType === 'college'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              College Student
+            </button>
+          </div>
+
+          {/* Conditional content */}
+          {userType === 'student' ? (
+            <>
+              {!submitted ? (
+                <form
+                  onSubmit={handleSubmit}
+                  className="mt-6 flex flex-col sm:flex-row gap-3 w-full max-w-md"
+                >
+                  <input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="flex-1 h-12 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition"
+                  />
+                  <button
+                    type="submit"
+                    className="h-12 px-6 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center gap-2 whitespace-nowrap"
+                  >
+                    Join Waitlist
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </form>
+              ) : (
+                <div className="mt-6 flex items-center gap-2 px-6 py-4 rounded-xl bg-accent/10 border border-accent/20">
+                  <Sparkles className="w-5 h-5 text-accent" />
+                  <span className="text-foreground">{"You're on the list! We'll be in touch soon."}</span>
+                </div>
+              )}
+            </>
           ) : (
-            <div className="mt-10 flex items-center gap-2 px-6 py-4 rounded-xl bg-accent/10 border border-accent/20">
-              <Sparkles className="w-5 h-5 text-accent" />
-              <span className="text-foreground">{"You're on the list! We'll be in touch soon."}</span>
+            <div className="mt-6">
+              <Link
+                href="/apply"
+                className="inline-flex items-center gap-2 h-12 px-8 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+              >
+                Apply to Become a Tutor Now
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
           )}
 
