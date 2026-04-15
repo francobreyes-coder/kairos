@@ -51,7 +51,7 @@ const colorMap = {
 // Shared iPhone frame wrapper
 function IPhoneFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative w-[260px] h-[560px] rounded-[2.5rem] bg-foreground p-2.5 shadow-xl shadow-foreground/10">
+    <div className="relative w-[260px] h-[520px] rounded-[2.5rem] bg-foreground p-2.5 shadow-xl shadow-foreground/10">
       {/* Dynamic island */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-6 bg-foreground rounded-full z-10" />
       <div className="relative rounded-[2rem] overflow-hidden bg-card h-full">
