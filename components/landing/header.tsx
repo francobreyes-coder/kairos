@@ -21,11 +21,21 @@ export function Header() {
       <nav className="mx-auto max-w-6xl px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">K</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-400 flex items-center justify-center shadow-sm flex-shrink-0">
+              <span
+                className="text-white text-xl leading-none select-none"
+                style={{ fontFamily: 'var(--font-playfair)', fontWeight: 900, fontStyle: 'italic', textShadow: '1px 1.5px 3px rgba(180,140,220,0.55)' }}
+              >
+                k
+              </span>
             </div>
-            <span className="font-semibold text-lg text-foreground">Kairos</span>
+            <span
+              className="text-xl leading-none text-foreground select-none"
+              style={{ fontFamily: 'var(--font-playfair)', fontWeight: 700, fontStyle: 'italic', textShadow: '2px 2px 0px rgba(0,0,0,0.12)' }}
+            >
+              kairos
+            </span>
           </div>
 
           {/* Desktop nav */}
