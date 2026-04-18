@@ -3,7 +3,8 @@
 import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/landing/header'
-import { Upload, X, CheckCircle, ArrowRight } from 'lucide-react'
+import { Upload, X, CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { submitApplication } from '@/app/actions'
 
 const SERVICES = [
   { id: 'essays', label: 'Essay Writing' },
@@ -119,6 +120,7 @@ export default function ApplyPage() {
     proof: null as File | null,
   })
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -149,9 +151,28 @@ export default function ApplyPage() {
   ]
   const progress = Math.round((checks.filter(Boolean).length / checks.length) * 100)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (progress === 100) setSubmitted(true)
+    if (progress < 100) return
+    setSubmitting(true)
+    await submitApplication({
+      name: form.name,
+      dob: form.dob,
+      university: form.university,
+      graduationYear: form.graduationYear,
+      major: form.major,
+      hobbies: form.hobbies,
+      collegeAcceptances: form.collegeAcceptances,
+      services: form.services,
+      satScore: form.satScore,
+      passion: form.passion,
+      whyKairos: form.whyKairos,
+      videoFilename: form.video?.name ?? '',
+      resumeFilename: form.resume?.name ?? '',
+      proofFilename: form.proof?.name ?? '',
+    })
+    setSubmitted(true)
+    setSubmitting(false)
   }
 
   // ── Success screen ──────────────────────────────────────────────────────────
@@ -433,11 +454,20 @@ export default function ApplyPage() {
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={progress < 100}
+                disabled={progress < 100 || submitting}
                 className="w-full h-12 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
               >
-                Submit Application
-                <ArrowRight className="w-4 h-4" />
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    Submit Application
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
               {progress < 100 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">

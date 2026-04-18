@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Sparkles, Star, GraduationCap } from 'lucide-react'
+import { submitWaitlist } from '@/app/actions'
 
 const tutors = [
   { initials: 'JL', school: 'Harvard', rating: 5.0 },
@@ -15,10 +16,15 @@ export function Hero() {
   const [userType, setUserType] = useState<'student' | 'college'>('student')
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (email) setSubmitted(true)
+    if (!email) return
+    setSubmitting(true)
+    await submitWaitlist(email, 'student')
+    setSubmitted(true)
+    setSubmitting(false)
   }
 
   return (
@@ -88,9 +94,10 @@ export function Hero() {
                   <button
                     type="submit"
                     className="h-12 px-6 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center gap-2 whitespace-nowrap"
+                    disabled={submitting}
                   >
-                    Join Waitlist
-                    <ArrowRight className="w-4 h-4" />
+                    {submitting ? 'Submitting…' : 'Join Waitlist'}
+                    {!submitting && <ArrowRight className="w-4 h-4" />}
                   </button>
                 </form>
               ) : (
