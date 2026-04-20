@@ -1,5 +1,8 @@
 'use server'
 
+import { auth } from '@/auth'
+import { getSupabase } from '@/lib/supabase'
+
 export async function submitWaitlist(
   email: string,
   userType: string
@@ -61,6 +64,29 @@ export async function submitApplication(data: {
       }),
       redirect: 'follow',
     })
+
+    const session = await auth()
+    const supabase = getSupabase()
+    await supabase.from('tutor_applications').insert({
+      user_id: session?.user?.id ?? null,
+      name: data.name,
+      email: session?.user?.email ?? '',
+      dob: data.dob,
+      university: data.university,
+      graduation_year: data.graduationYear,
+      major: data.major,
+      hobbies: data.hobbies,
+      college_acceptances: data.collegeAcceptances,
+      services_applied: data.services,
+      sat_score: data.satScore,
+      passion: data.passion,
+      why_kairos: data.whyKairos,
+      video_filename: data.videoFilename,
+      resume_filename: data.resumeFilename,
+      proof_filename: data.proofFilename,
+      application_status: 'pending',
+    })
+
     return { success: res.ok || res.status === 302 }
   } catch (err) {
     console.error('Application submission failed:', err)

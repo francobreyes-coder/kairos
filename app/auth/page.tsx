@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
@@ -95,14 +96,7 @@ export default function AuthPage() {
 
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-10">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-400 flex items-center justify-center shadow-sm">
-            <span
-              className="text-white text-2xl leading-none select-none"
-              style={{ fontFamily: 'Shrikhand, cursive' }}
-            >
-              k
-            </span>
-          </div>
+          <Image src="/logo.png" alt="Kairos" width={40} height={40} className="rounded-xl" />
           <span
             className="text-2xl leading-none text-foreground select-none"
             style={{ fontFamily: 'Shrikhand, cursive' }}

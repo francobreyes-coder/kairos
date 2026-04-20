@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Menu, X, LogOut } from 'lucide-react'
 
 const navLinks = [
@@ -47,14 +48,7 @@ export function Header() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-400 flex items-center justify-center shadow-sm flex-shrink-0">
-              <span
-                className="text-white text-xl leading-none select-none"
-                style={{ fontFamily: 'Shrikhand, cursive' }}
-              >
-                k
-              </span>
-            </div>
+            <Image src="/logo.png" alt="Kairos" width={36} height={36} className="rounded-xl flex-shrink-0" />
             <span
               className="text-xl leading-none text-foreground select-none"
               style={{ fontFamily: 'Shrikhand, cursive' }}
