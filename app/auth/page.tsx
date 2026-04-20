@@ -37,14 +37,14 @@ export default function AuthPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-400 flex items-center justify-center shadow-sm">
             <span
               className="text-white text-2xl leading-none select-none"
-              style={{ fontFamily: 'var(--font-playfair)', fontWeight: 900, fontStyle: 'italic', textShadow: '1px 1.5px 3px rgba(180,140,220,0.55)' }}
+              style={{ fontFamily: 'Shrikhand, cursive' }}
             >
               k
             </span>
           </div>
           <span
             className="text-2xl leading-none text-foreground select-none"
-            style={{ fontFamily: 'var(--font-playfair)', fontWeight: 700, fontStyle: 'italic' }}
+            style={{ fontFamily: 'Shrikhand, cursive' }}
           >
             kairos
           </span>

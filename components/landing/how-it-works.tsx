@@ -38,7 +38,7 @@ export function HowItWorks() {
     <section id="how-it-works" className="py-24 px-6">
       <div className="mx-auto max-w-6xl">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-semibold text-foreground tracking-tight">
+          <h2 className="text-3xl md:text-4xl text-foreground tracking-tight" style={{ fontFamily: 'Shrikhand, cursive' }}>
             Three Pillars of Success
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">

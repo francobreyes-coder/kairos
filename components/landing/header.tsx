@@ -50,14 +50,14 @@ export function Header() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-400 flex items-center justify-center shadow-sm flex-shrink-0">
               <span
                 className="text-white text-xl leading-none select-none"
-                style={{ fontFamily: 'var(--font-playfair)', fontWeight: 900, fontStyle: 'italic', textShadow: '1px 1.5px 3px rgba(180,140,220,0.55)' }}
+                style={{ fontFamily: 'Shrikhand, cursive' }}
               >
                 k
               </span>
             </div>
             <span
               className="text-xl leading-none text-foreground select-none"
-              style={{ fontFamily: 'var(--font-playfair)', fontWeight: 700, fontStyle: 'italic' }}
+              style={{ fontFamily: 'Shrikhand, cursive' }}
             >
               kairos
             </span>

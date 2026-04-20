@@ -23,7 +23,7 @@ export function CTA() {
     <section id="cta" className="py-24 px-6 bg-primary">
       <div className="mx-auto max-w-3xl text-center">
 
-        <h2 className="text-3xl md:text-4xl font-semibold text-primary-foreground tracking-tight text-balance">
+        <h2 className="text-3xl md:text-4xl text-primary-foreground tracking-tight text-balance" style={{ fontFamily: 'Shrikhand, cursive' }}>
           Ready to get started?
         </h2>
         <p className="mt-4 text-lg text-primary-foreground/80">
