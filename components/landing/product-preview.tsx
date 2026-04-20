@@ -66,7 +66,7 @@ export function ProductPreview() {
     <section id="preview" className="py-24 px-6 bg-secondary/30">
       <div className="mx-auto max-w-6xl">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl text-foreground tracking-tight" style={{ fontFamily: 'Shrikhand, cursive' }}>
+          <h2 className="text-3xl md:text-4xl tracking-tight bg-gradient-to-r from-purple-600 via-purple-500 to-pink-400 bg-clip-text text-transparent" style={{ fontFamily: 'Shrikhand, cursive' }}>
             Everything You Need in One App
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">

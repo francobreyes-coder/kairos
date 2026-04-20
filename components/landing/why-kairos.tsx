@@ -35,7 +35,7 @@ export function WhyKairos() {
 
           {/* Left — copy */}
           <div>
-            <h2 className="text-3xl md:text-4xl text-foreground tracking-tight text-balance" style={{ fontFamily: 'Shrikhand, cursive' }}>
+            <h2 className="text-3xl md:text-4xl tracking-tight text-balance bg-gradient-to-r from-purple-600 via-purple-500 to-pink-400 bg-clip-text text-transparent" style={{ fontFamily: 'Shrikhand, cursive' }}>
               Why learn from undergrads?
             </h2>
             <p className="mt-6 text-lg text-muted-foreground leading-relaxed">
