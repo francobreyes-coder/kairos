@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 import { Header } from '@/components/landing/header'
 import { Upload, X, CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
 import { submitApplication } from '@/app/actions'
@@ -23,23 +24,31 @@ function clampToWords(text: string, max: number) {
   return words.length > max ? words.slice(0, max).join(' ') : text
 }
 
-// ── File upload zone ──────────────────────────────────────────────────────────
+type FileRef = { filename: string; path: string }
+
 function FileUpload({
   label,
   hint,
   accept,
   required,
   value,
-  onChange,
+  savedRef,
+  uploading,
+  onSelect,
+  onRemove,
 }: {
   label: string
   hint: string
   accept: string
   required?: boolean
   value: File | null
-  onChange: (f: File | null) => void
+  savedRef: FileRef | null
+  uploading: boolean
+  onSelect: (f: File) => void
+  onRemove: () => void
 }) {
   const ref = useRef<HTMLInputElement>(null)
+  const displayName = value?.name ?? savedRef?.filename
 
   return (
     <div>
@@ -47,9 +56,9 @@ function FileUpload({
         {label}{required && <span className="text-accent ml-1">*</span>}
       </label>
       <div
-        onClick={() => ref.current?.click()}
+        onClick={() => !uploading && ref.current?.click()}
         className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-          value
+          displayName
             ? 'border-accent/40 bg-accent/5'
             : 'border-border hover:border-accent/40 hover:bg-secondary/50'
         }`}
@@ -59,15 +68,23 @@ function FileUpload({
           type="file"
           accept={accept}
           className="hidden"
-          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onSelect(file)
+          }}
         />
-        {value ? (
+        {uploading ? (
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-accent" />
+            <span className="text-sm text-muted-foreground">Uploading...</span>
+          </div>
+        ) : displayName ? (
           <div className="flex items-center justify-center gap-2">
             <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-            <span className="text-sm text-foreground truncate max-w-[260px]">{value.name}</span>
+            <span className="text-sm text-foreground truncate max-w-[260px]">{displayName}</span>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onChange(null) }}
+              onClick={(e) => { e.stopPropagation(); onRemove() }}
               className="ml-1 text-muted-foreground hover:text-foreground flex-shrink-0"
               aria-label="Remove file"
             >
@@ -86,7 +103,6 @@ function FileUpload({
   )
 }
 
-// ── Field wrapper ─────────────────────────────────────────────────────────────
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
@@ -101,28 +117,51 @@ function Field({ label, required, children }: { label: string; required?: boolea
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+interface FormState {
+  name: string
+  dob: string
+  university: string
+  graduationYear: string
+  major: string
+  hobbies: string
+  collegeAcceptances: string
+  services: string[]
+  satScore: string
+  passion: string
+  whyKairos: string
+}
+
+const emptyForm: FormState = {
+  name: '',
+  dob: '',
+  university: '',
+  graduationYear: '',
+  major: '',
+  hobbies: '',
+  collegeAcceptances: '',
+  services: [],
+  satScore: '',
+  passion: '',
+  whyKairos: '',
+}
+
 export default function ApplyPage() {
-  const [form, setForm] = useState({
-    name: '',
-    dob: '',
-    university: '',
-    graduationYear: '',
-    major: '',
-    hobbies: '',
-    collegeAcceptances: '',
-    services: [] as string[],
-    satScore: '',
-    passion: '',
-    whyKairos: '',
-    video: null as File | null,
-    resume: null as File | null,
-    proof: null as File | null,
+  const { data: session } = useSession()
+  const [form, setForm] = useState<FormState>(emptyForm)
+  const [files, setFiles] = useState<{ video: File | null; resume: File | null; proof: File | null }>({
+    video: null, resume: null, proof: null,
+  })
+  const [savedFiles, setSavedFiles] = useState<{
+    video: FileRef | null; resume: FileRef | null; proof: FileRef | null
+  }>({ video: null, resume: null, proof: null })
+  const [uploading, setUploading] = useState<{ video: boolean; resume: boolean; proof: boolean }>({
+    video: false, resume: false, proof: false,
   })
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [draftLoaded, setDraftLoaded] = useState(false)
 
-  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
@@ -135,19 +174,103 @@ export default function ApplyPage() {
     }))
   }
 
-  // Progress — count required fields that are filled
+  // Load saved draft when logged in
+  useEffect(() => {
+    if (!session?.user || draftLoaded) return
+    fetch('/api/drafts')
+      .then((r) => r.json())
+      .then(({ draft }) => {
+        if (draft) {
+          const { videoRef, resumeRef, proofRef, ...formFields } = draft
+          setForm((prev) => ({ ...prev, ...formFields }))
+          setSavedFiles({
+            video: videoRef ?? null,
+            resume: resumeRef ?? null,
+            proof: proofRef ?? null,
+          })
+        }
+        setDraftLoaded(true)
+      })
+      .catch(() => setDraftLoaded(true))
+  }, [session, draftLoaded])
+
+  // Auto-save draft (debounced)
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(null)
+  const saveDraft = useCallback(() => {
+    if (!session?.user) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formData: {
+            ...form,
+            videoRef: savedFiles.video,
+            resumeRef: savedFiles.resume,
+            proofRef: savedFiles.proof,
+          },
+        }),
+      })
+    }, 1500)
+  }, [session, form, savedFiles])
+
+  useEffect(() => {
+    if (draftLoaded) saveDraft()
+  }, [form, savedFiles, saveDraft, draftLoaded])
+
+  // File upload handler
+  async function handleFileSelect(type: 'video' | 'resume' | 'proof', file: File) {
+    setFiles((f) => ({ ...f, [type]: file }))
+
+    if (!session?.user) return
+
+    setUploading((u) => ({ ...u, [type]: true }))
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('fileType', type)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.path) {
+        setSavedFiles((f) => ({ ...f, [type]: { filename: data.filename, path: data.path } }))
+        setFiles((f) => ({ ...f, [type]: null }))
+      }
+    } finally {
+      setUploading((u) => ({ ...u, [type]: false }))
+    }
+  }
+
+  async function handleFileRemove(type: 'video' | 'resume' | 'proof') {
+    const ref = savedFiles[type]
+    setFiles((f) => ({ ...f, [type]: null }))
+    setSavedFiles((f) => ({ ...f, [type]: null }))
+
+    if (ref?.path && session?.user) {
+      fetch('/api/upload', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: ref.path }),
+      })
+    }
+  }
+
+  const hasFile = (type: 'video' | 'resume' | 'proof') =>
+    files[type] !== null || savedFiles[type] !== null
+
+  // Progress
   const checks = [
-    form.name.trim().length > 0,           // 1
-    form.dob.length > 0,                    // 2
-    form.university.trim().length > 0,      // 3
-    form.graduationYear.length > 0,         // 4
-    form.major.trim().length > 0,           // 5
-    form.services.length > 0,              // 6
-    wordCount(form.passion) >= 10,          // 7
-    wordCount(form.whyKairos) >= 10,        // 8
-    form.video !== null,                    // 9
-    form.resume !== null,                   // 10
-    form.proof !== null,                    // 11
+    form.name.trim().length > 0,
+    form.dob.length > 0,
+    form.university.trim().length > 0,
+    form.graduationYear.length > 0,
+    form.major.trim().length > 0,
+    form.services.length > 0,
+    wordCount(form.passion) >= 10,
+    wordCount(form.whyKairos) >= 10,
+    hasFile('video'),
+    hasFile('resume'),
+    hasFile('proof'),
   ]
   const progress = Math.round((checks.filter(Boolean).length / checks.length) * 100)
 
@@ -167,15 +290,14 @@ export default function ApplyPage() {
       satScore: form.satScore,
       passion: form.passion,
       whyKairos: form.whyKairos,
-      videoFilename: form.video?.name ?? '',
-      resumeFilename: form.resume?.name ?? '',
-      proofFilename: form.proof?.name ?? '',
+      videoFilename: savedFiles.video?.filename ?? files.video?.name ?? '',
+      resumeFilename: savedFiles.resume?.filename ?? files.resume?.name ?? '',
+      proofFilename: savedFiles.proof?.filename ?? files.proof?.name ?? '',
     })
     setSubmitted(true)
     setSubmitting(false)
   }
 
-  // ── Success screen ──────────────────────────────────────────────────────────
   if (submitted) {
     return (
       <>
@@ -201,16 +323,20 @@ export default function ApplyPage() {
     )
   }
 
-  // ── Form ────────────────────────────────────────────────────────────────────
   return (
     <>
       <Header />
 
-      {/* Progress bar — fixed below the header */}
+      {/* Progress bar */}
       <div className="fixed top-[73px] left-0 right-0 z-40 bg-background/90 backdrop-blur-sm border-b border-border px-6 py-3">
         <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-muted-foreground">Application Progress</span>
+            <span className="text-xs text-muted-foreground">
+              Application Progress
+              {session?.user && (
+                <span className="text-accent ml-2">Saving automatically</span>
+              )}
+            </span>
             <span className="text-xs font-semibold text-accent">{progress}%</span>
           </div>
           <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -225,7 +351,6 @@ export default function ApplyPage() {
       <main className="pt-40 pb-24 px-6">
         <div className="mx-auto max-w-2xl">
 
-          {/* Page header */}
           <div className="mb-10">
             <h1 className="text-3xl font-semibold text-foreground tracking-tight">
               Apply to Become a Tutor
@@ -233,11 +358,19 @@ export default function ApplyPage() {
             <p className="mt-2 text-muted-foreground">
               Share your background and help the next generation of students reach their dream schools.
             </p>
+            {!session?.user && (
+              <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-purple-600/10 border border-purple-600/20">
+                <span className="text-sm text-foreground">
+                  <Link href="/auth" className="text-purple-600 font-medium hover:underline">Sign in</Link>
+                  {' '}to save your progress and resume later.
+                </span>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
 
-            {/* ── Personal info ── */}
+            {/* Personal info */}
             <div className="rounded-2xl bg-card border border-border p-6 space-y-5">
               <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide text-muted-foreground">
                 Personal Information
@@ -273,7 +406,7 @@ export default function ApplyPage() {
               </Field>
             </div>
 
-            {/* ── Academic info ── */}
+            {/* Academic info */}
             <div className="rounded-2xl bg-card border border-border p-6 space-y-5">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Academic Background
@@ -335,7 +468,7 @@ export default function ApplyPage() {
               </Field>
             </div>
 
-            {/* ── Tutoring services ── */}
+            {/* Services */}
             <div className="rounded-2xl bg-card border border-border p-6">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
                 Services
@@ -373,13 +506,12 @@ export default function ApplyPage() {
               </div>
             </div>
 
-            {/* ── Short answers ── */}
+            {/* Short answers */}
             <div className="rounded-2xl bg-card border border-border p-6 space-y-6">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Short Answers
               </h2>
 
-              {/* Passion */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">
                   Tell us briefly about something you are passionate about.
@@ -397,7 +529,6 @@ export default function ApplyPage() {
                 </div>
               </div>
 
-              {/* Why Kairos */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">
                   Why do you want to become a Kairos tutor?
@@ -416,7 +547,7 @@ export default function ApplyPage() {
               </div>
             </div>
 
-            {/* ── File uploads ── */}
+            {/* File uploads */}
             <div className="rounded-2xl bg-card border border-border p-6 space-y-5">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Attachments
@@ -427,8 +558,11 @@ export default function ApplyPage() {
                 hint="Upload a ~1 minute video telling us about yourself"
                 accept="video/*"
                 required
-                value={form.video}
-                onChange={(f) => set('video', f)}
+                value={files.video}
+                savedRef={savedFiles.video}
+                uploading={uploading.video}
+                onSelect={(f) => handleFileSelect('video', f)}
+                onRemove={() => handleFileRemove('video')}
               />
 
               <FileUpload
@@ -436,8 +570,11 @@ export default function ApplyPage() {
                 hint="PDF or Word document (.pdf, .doc, .docx)"
                 accept=".pdf,.doc,.docx"
                 required
-                value={form.resume}
-                onChange={(f) => set('resume', f)}
+                value={files.resume}
+                savedRef={savedFiles.resume}
+                uploading={uploading.resume}
+                onSelect={(f) => handleFileSelect('resume', f)}
+                onRemove={() => handleFileRemove('resume')}
               />
 
               <FileUpload
@@ -445,12 +582,15 @@ export default function ApplyPage() {
                 hint="Student ID, Canvas screenshot, or acceptance letter"
                 accept="image/*,.pdf"
                 required
-                value={form.proof}
-                onChange={(f) => set('proof', f)}
+                value={files.proof}
+                savedRef={savedFiles.proof}
+                uploading={uploading.proof}
+                onSelect={(f) => handleFileSelect('proof', f)}
+                onRemove={() => handleFileRemove('proof')}
               />
             </div>
 
-            {/* ── Submit ── */}
+            {/* Submit */}
             <div className="pt-2">
               <button
                 type="submit"
@@ -460,7 +600,7 @@ export default function ApplyPage() {
                 {submitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Submitting…
+                    Submitting...
                   </>
                 ) : (
                   <>
