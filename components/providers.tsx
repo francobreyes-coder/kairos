@@ -11,11 +11,25 @@ function PostSignInHandler() {
     const optin = sessionStorage.getItem('kairos_email_optin')
     if (optin === null) return
 
+    const signupRaw = sessionStorage.getItem('kairos_signup')
+    const signup = signupRaw ? JSON.parse(signupRaw) : null
+
     fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emailOptin: optin === 'true' }),
-    }).then(() => sessionStorage.removeItem('kairos_email_optin'))
+      body: JSON.stringify({
+        emailOptin: optin === 'true',
+        ...(signup && {
+          firstName: signup.firstName,
+          lastName: signup.lastName,
+          contactEmail: signup.email,
+          age: signup.age,
+        }),
+      }),
+    }).then(() => {
+      sessionStorage.removeItem('kairos_email_optin')
+      sessionStorage.removeItem('kairos_signup')
+    })
   }, [session])
 
   return null
