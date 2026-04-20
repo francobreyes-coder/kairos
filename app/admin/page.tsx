@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon } from 'lucide-react'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
@@ -34,6 +34,7 @@ interface Application {
   resume_filename: string
   proof_filename: string
   application_status: 'pending' | 'approved' | 'denied'
+  denial_reason: string | null
   created_at: string
 }
 
@@ -61,6 +62,53 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function FileLink({ label, filename, userId, fileType, icon: Icon }: {
+  label: string
+  filename: string
+  userId: string | null
+  fileType: string
+  icon: typeof FileText
+}) {
+  const [loading, setLoading] = useState(false)
+
+  if (!filename || !userId) return null
+
+  async function openFile() {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ userId: userId!, filename, fileType })
+      const res = await fetch(`/api/admin/files?${params}`)
+      const data = await res.json()
+      if (data.url) {
+        window.open(data.url, '_blank')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={openFile}
+      disabled={loading}
+      className="flex items-center gap-3 w-full p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-left group"
+    >
+      <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+        <Icon className="w-4 h-4 text-purple-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{label}</p>
+        <p className="text-xs text-muted-foreground truncate">{filename}</p>
+      </div>
+      {loading ? (
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+      ) : (
+        <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground flex-shrink-0" />
+      )}
+    </button>
+  )
+}
+
 export default function AdminPage() {
   const { data: session, status: sessionStatus } = useSession()
   const router = useRouter()
@@ -70,6 +118,8 @@ export default function AdminPage() {
   const [acting, setActing] = useState(false)
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'denied'>('pending')
   const [approvedServices, setApprovedServices] = useState<string[]>([])
+  const [denialReason, setDenialReason] = useState('')
+  const [showDenyForm, setShowDenyForm] = useState(false)
 
   const isAdmin = session?.user?.email === ADMIN_EMAIL
 
@@ -93,9 +143,11 @@ export default function AdminPage() {
   function openDetail(app: Application) {
     setSelected(app)
     setApprovedServices(app.services_approved ?? app.services_applied ?? [])
+    setDenialReason('')
+    setShowDenyForm(false)
   }
 
-  async function handleAction(action: 'approve' | 'deny') {
+  async function handleApprove() {
     if (!selected) return
     setActing(true)
     await fetch('/api/admin', {
@@ -103,12 +155,31 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: selected.id,
-        action,
-        services_approved: action === 'approve' ? approvedServices : [],
+        action: 'approve',
+        services_approved: approvedServices,
       }),
     })
     setSelected(null)
     setActing(false)
+    fetchApplications()
+  }
+
+  async function handleDeny() {
+    if (!selected) return
+    setActing(true)
+    await fetch('/api/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: selected.id,
+        action: 'deny',
+        denial_reason: denialReason,
+      }),
+    })
+    setSelected(null)
+    setActing(false)
+    setShowDenyForm(false)
+    setDenialReason('')
     fetchApplications()
   }
 
@@ -159,7 +230,7 @@ export default function AdminPage() {
       <main className="min-h-screen bg-background">
         <div className="mx-auto max-w-3xl px-6 py-8">
           <button
-            onClick={() => setSelected(null)}
+            onClick={() => { setSelected(null); setShowDenyForm(false); setDenialReason('') }}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
           >
             <ChevronLeft className="w-4 h-4" /> Back to list
@@ -249,31 +320,91 @@ export default function AdminPage() {
 
             <div className="rounded-2xl bg-card border border-border p-6">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">Attachments</h2>
-              <dl className="space-y-3">
-                <DetailRow label="Video" value={selected.video_filename} />
-                <DetailRow label="Resume" value={selected.resume_filename} />
-                <DetailRow label="Proof of Admission" value={selected.proof_filename} />
-              </dl>
+              <div className="space-y-3">
+                <FileLink
+                  label="Video Introduction"
+                  filename={selected.video_filename}
+                  userId={selected.user_id}
+                  fileType="video"
+                  icon={Video}
+                />
+                <FileLink
+                  label="Resume"
+                  filename={selected.resume_filename}
+                  userId={selected.user_id}
+                  fileType="resume"
+                  icon={FileText}
+                />
+                <FileLink
+                  label="Proof of Admission"
+                  filename={selected.proof_filename}
+                  userId={selected.user_id}
+                  fileType="proof"
+                  icon={ImageIcon}
+                />
+              </div>
             </div>
 
+            {selected.application_status === 'denied' && selected.denial_reason && (
+              <div className="rounded-2xl bg-red-500/5 border border-red-500/20 p-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-red-600 mb-2">Denial Reason</h2>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{selected.denial_reason}</p>
+              </div>
+            )}
+
             {selected.application_status === 'pending' && (
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => handleAction('approve')}
-                  disabled={acting}
-                  className="flex-1 h-12 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
-                >
-                  {acting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                  Approve
-                </button>
-                <button
-                  onClick={() => handleAction('deny')}
-                  disabled={acting}
-                  className="flex-1 h-12 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
-                >
-                  {acting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                  Deny
-                </button>
+              <div className="space-y-4 pt-2">
+                {showDenyForm ? (
+                  <div className="rounded-2xl bg-card border border-red-500/20 p-6 space-y-4">
+                    <h2 className="text-sm font-semibold text-red-600">Deny Application</h2>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">
+                        Reason for denial (included in email to applicant)
+                      </label>
+                      <textarea
+                        value={denialReason}
+                        onChange={(e) => setDenialReason(e.target.value)}
+                        rows={4}
+                        placeholder="Explain why the application is being denied or what the applicant needs to resubmit..."
+                        className="w-full px-4 py-3 rounded-lg bg-background border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-red-500/30 transition resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleDeny}
+                        disabled={acting || !denialReason.trim()}
+                        className="flex-1 h-10 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                      >
+                        {acting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                        Confirm Deny
+                      </button>
+                      <button
+                        onClick={() => { setShowDenyForm(false); setDenialReason('') }}
+                        className="px-4 h-10 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleApprove}
+                      disabled={acting}
+                      className="flex-1 h-12 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                    >
+                      {acting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => setShowDenyForm(true)}
+                      className="flex-1 h-12 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Deny
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

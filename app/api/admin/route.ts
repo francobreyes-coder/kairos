@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
+import { sendApprovalEmail, sendDenialEmail } from '@/lib/email'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
+
+const SERVICE_LABELS: Record<string, string> = {
+  essays: 'Essay Writing',
+  'sat-act': 'SAT/ACT Prep',
+  activities: 'Activities List Building',
+}
 
 async function checkAdmin() {
   const session = await auth()
@@ -33,7 +40,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { id, action, services_approved } = await req.json()
+  const { id, action, services_approved, denial_reason } = await req.json()
   if (!id || !action) {
     return NextResponse.json({ error: 'Missing id or action' }, { status: 400 })
   }
@@ -48,6 +55,9 @@ export async function PATCH(req: Request) {
     if (action === 'approve' && services_approved) {
       updates.services_approved = services_approved
     }
+    if (action === 'deny' && denial_reason) {
+      updates.denial_reason = denial_reason
+    }
 
     const { error } = await supabase
       .from('tutor_applications')
@@ -56,6 +66,25 @@ export async function PATCH(req: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const { data: app } = await supabase
+      .from('tutor_applications')
+      .select('name, email')
+      .eq('id', id)
+      .single()
+
+    if (app?.email) {
+      try {
+        if (action === 'approve') {
+          const labels = (services_approved ?? []).map((s: string) => SERVICE_LABELS[s] ?? s)
+          await sendApprovalEmail(app.email, app.name, labels)
+        } else {
+          await sendDenialEmail(app.email, app.name, denial_reason ?? '')
+        }
+      } catch (e) {
+        console.error('Failed to send email:', e)
+      }
     }
 
     return NextResponse.json({ ok: true })

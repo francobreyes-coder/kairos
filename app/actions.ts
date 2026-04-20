@@ -2,6 +2,7 @@
 
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
+import { sendApplicationReceivedEmail } from '@/lib/email'
 
 export async function submitWaitlist(
   email: string,
@@ -86,6 +87,14 @@ export async function submitApplication(data: {
       proof_filename: data.proofFilename,
       application_status: 'pending',
     })
+
+    if (session?.user?.email) {
+      try {
+        await sendApplicationReceivedEmail(session.user.email, data.name)
+      } catch (e) {
+        console.error('Failed to send application received email:', e)
+      }
+    }
 
     return { success: res.ok || res.status === 302 }
   } catch (err) {

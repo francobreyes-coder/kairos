@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
+import { sendWelcomeEmail } from '@/lib/email'
 
 export async function POST(req: Request) {
   const session = await auth()
@@ -10,6 +11,12 @@ export async function POST(req: Request) {
 
   const { emailOptin, firstName, lastName, contactEmail, age } = await req.json()
   const supabase = getSupabase()
+
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', session.user.id)
+    .single()
 
   await supabase.from('users').upsert(
     {
@@ -26,6 +33,15 @@ export async function POST(req: Request) {
     },
     { onConflict: 'id' }
   )
+
+  if (!existing) {
+    try {
+      const name = firstName || session.user.name?.split(' ')[0] || 'there'
+      await sendWelcomeEmail(session.user.email, name)
+    } catch (e) {
+      console.error('Failed to send welcome email:', e)
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }

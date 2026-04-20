@@ -2,6 +2,7 @@ import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import Credentials from 'next-auth/providers/credentials'
 import { getSupabase } from '@/lib/supabase'
+import { sendWelcomeEmail } from '@/lib/email'
 
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
@@ -66,6 +67,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email_optin: emailOptin === 'true',
           updated_at: new Date().toISOString(),
         })
+
+        try {
+          await sendWelcomeEmail(email, firstName)
+        } catch (e) {
+          console.error('Failed to send welcome email:', e)
+        }
 
         return { id, email, name: `${firstName} ${lastName}` }
       },
