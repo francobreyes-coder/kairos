@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, X, LogOut } from 'lucide-react'
+import { Menu, X, LogOut, UserCircle } from 'lucide-react'
 
 const navLinks = [
   { label: 'How It Works', target: 'how-it-works' },
@@ -95,6 +95,14 @@ export function Header() {
                         <p className="text-sm font-medium text-foreground truncate">{session.user?.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{session.user?.email}</p>
                       </div>
+                      <Link
+                        href="/tutor/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      >
+                        <UserCircle className="w-4 h-4" />
+                        View Profile
+                      </Link>
                       <button
                         onClick={() => signOut()}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -149,17 +157,26 @@ export function Header() {
               Join Waitlist
             </button>
             {session ? (
-              <div className="flex items-center justify-between pt-2 border-t border-border">
+              <div className="pt-2 border-t border-border space-y-3">
                 <div className="flex items-center gap-2">
                   <UserAvatar name={session.user?.name} image={session.user?.image} />
                   <span className="text-sm text-foreground truncate">{session.user?.name}</span>
                 </div>
-                <button
-                  onClick={() => signOut()}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Sign Out
-                </button>
+                <div className="flex items-center gap-4">
+                  <Link
+                    href="/tutor/profile"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-sm text-accent hover:text-accent/80 font-medium"
+                  >
+                    View Profile
+                  </Link>
+                  <button
+                    onClick={() => signOut()}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Sign Out
+                  </button>
+                </div>
               </div>
             ) : (
               <Link
