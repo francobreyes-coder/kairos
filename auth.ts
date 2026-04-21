@@ -121,13 +121,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       // Fetch role from DB on first sign-in or when refreshed
       if (user || trigger === 'update') {
-        const supabase = getSupabase()
-        const { data } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', token.sub ?? user?.id)
-          .single()
-        token.role = data?.role ?? null
+        try {
+          const supabase = getSupabase()
+          const { data } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', token.sub ?? user?.id)
+            .single()
+          token.role = data?.role ?? null
+        } catch {
+          token.role = null
+        }
       }
       return token
     },
