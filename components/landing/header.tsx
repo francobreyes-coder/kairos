@@ -42,23 +42,29 @@ export function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: session } = useSession()
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
-  const [hasTutorApp, setHasTutorApp] = useState(false)
-
-  const isTutor = hasTutorApp
-  const profileHref = isTutor ? '/tutor/profile' : '/find-tutors'
+  const [profileHref, setProfileHref] = useState('/tutor/profile')
 
   useEffect(() => {
     if (!session?.user?.id) return
     fetch('/api/tutor/profile')
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('fetch failed')
+        return r.json()
+      })
       .then(({ profile, application }) => {
-        // profile or application means this user is a tutor
-        if (application || profile) setHasTutorApp(true)
+        if (application || profile) {
+          setProfileHref('/tutor/profile')
+        } else {
+          setProfileHref('/find-tutors')
+        }
         if (profile?.profile_photo) {
           setProfilePhoto(`/api/storage?path=${encodeURIComponent(profile.profile_photo)}`)
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Default to tutor profile on error
+        setProfileHref('/tutor/profile')
+      })
   }, [session?.user?.id])
 
   return (
