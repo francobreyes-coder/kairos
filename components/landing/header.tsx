@@ -52,7 +52,8 @@ export function Header() {
     fetch('/api/tutor/profile')
       .then((r) => r.json())
       .then(({ profile, application }) => {
-        if (application) setHasTutorApp(true)
+        // profile or application means this user is a tutor
+        if (application || profile) setHasTutorApp(true)
         if (profile?.profile_photo) {
           setProfilePhoto(`/api/storage?path=${encodeURIComponent(profile.profile_photo)}`)
         }

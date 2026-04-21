@@ -88,10 +88,14 @@ export default function AuthPage() {
     }
   }
 
-  const handleGoogle = () => {
+  const handleGoogleSignup = () => {
     sessionStorage.setItem('kairos_email_optin', emailOptin ? 'true' : 'false')
     sessionStorage.setItem('kairos_role', role)
     signIn('google', { callbackUrl: role === 'high_school' ? '/student/onboarding' : '/home' })
+  }
+
+  const handleGoogleSignin = () => {
+    signIn('google', { callbackUrl: '/home' })
   }
 
   return (
@@ -252,7 +256,7 @@ export default function AuthPage() {
 
             {/* Google option */}
             <button
-              onClick={handleGoogle}
+              onClick={handleGoogleSignup}
               className="w-full h-12 rounded-lg bg-card border border-border text-foreground text-sm font-medium inline-flex items-center justify-center gap-3 hover:bg-secondary transition-colors"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -307,7 +311,7 @@ export default function AuthPage() {
 
             {/* Google option */}
             <button
-              onClick={handleGoogle}
+              onClick={handleGoogleSignin}
               className="w-full h-12 rounded-lg bg-card border border-border text-foreground text-sm font-medium inline-flex items-center justify-center gap-3 hover:bg-secondary transition-colors"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
