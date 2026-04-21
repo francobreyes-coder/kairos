@@ -51,8 +51,8 @@ export function Header() {
         if (!r.ok) throw new Error('fetch failed')
         return r.json()
       })
-      .then(({ profile, application }) => {
-        if (application || profile) {
+      .then(({ profile, application, hasApplication }) => {
+        if (application || profile || hasApplication) {
           setProfileHref('/tutor/profile')
         } else {
           setProfileHref('/find-tutors')

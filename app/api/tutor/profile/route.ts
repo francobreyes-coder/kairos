@@ -18,12 +18,20 @@ export async function GET() {
 
   const { data: application } = await supabase
     .from('tutor_applications')
-    .select('university, major, services_approved, name')
+    .select('university, major, services_approved, name, application_status')
     .eq('user_id', session.user.id)
     .eq('application_status', 'approved')
     .single()
 
-  return NextResponse.json({ profile, application })
+  // Also check if user has ANY tutor application (regardless of status)
+  // so the header can route to /tutor/profile instead of /find-tutors
+  const { data: anyApplication } = await supabase
+    .from('tutor_applications')
+    .select('id')
+    .eq('user_id', session.user.id)
+    .single()
+
+  return NextResponse.json({ profile, application, hasApplication: !!anyApplication })
 }
 
 export async function POST(req: Request) {
