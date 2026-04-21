@@ -19,6 +19,7 @@ export default function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
+  const [role, setRole] = useState<'high_school' | 'college'>('high_school')
   const [emailOptin, setEmailOptin] = useState(true)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -55,13 +56,14 @@ export default function AuthPage() {
       age: age.trim(),
       password,
       emailOptin: emailOptin ? 'true' : 'false',
+      role,
     })
 
     if (result?.error) {
       setError('An account with this email may already exist. Try signing in.')
       setSubmitting(false)
     } else {
-      router.push('/home')
+      router.push(role === 'high_school' ? '/student/onboarding' : '/home')
     }
   }
 
@@ -87,7 +89,8 @@ export default function AuthPage() {
 
   const handleGoogle = () => {
     sessionStorage.setItem('kairos_email_optin', emailOptin ? 'true' : 'false')
-    signIn('google', { callbackUrl: '/home' })
+    sessionStorage.setItem('kairos_role', role)
+    signIn('google', { callbackUrl: role === 'high_school' ? '/student/onboarding' : '/home' })
   }
 
   return (
@@ -141,6 +144,32 @@ export default function AuthPage() {
 
         {mode === 'create' ? (
           <>
+            {/* Role toggle */}
+            <div className="flex rounded-full bg-secondary border border-border p-1 mb-4">
+              <button
+                type="button"
+                onClick={() => setRole('high_school')}
+                className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
+                  role === 'high_school'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {"I'm in High School"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('college')}
+                className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
+                  role === 'college'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {"I'm in College"}
+              </button>
+            </div>
+
             {/* Sign-up form */}
             <form onSubmit={handleFormSignup} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">

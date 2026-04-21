@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -41,6 +41,19 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: session } = useSession()
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch('/api/tutor/profile')
+      .then((r) => r.json())
+      .then(({ profile }) => {
+        if (profile?.profile_photo) {
+          setProfilePhoto(`/api/storage?path=${encodeURIComponent(profile.profile_photo)}`)
+        }
+      })
+      .catch(() => {})
+  }, [session?.user?.id])
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -85,7 +98,7 @@ export function Header() {
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="rounded-full ring-2 ring-transparent hover:ring-accent/30 transition-all"
                 >
-                  <UserAvatar name={session.user?.name} image={session.user?.image} />
+                  <UserAvatar name={session.user?.name} image={profilePhoto || session.user?.image} />
                 </button>
                 {userMenuOpen && (
                   <>
@@ -159,7 +172,7 @@ export function Header() {
             {session ? (
               <div className="pt-2 border-t border-border space-y-3">
                 <div className="flex items-center gap-2">
-                  <UserAvatar name={session.user?.name} image={session.user?.image} />
+                  <UserAvatar name={session.user?.name} image={profilePhoto || session.user?.image} />
                   <span className="text-sm text-foreground truncate">{session.user?.name}</span>
                 </div>
                 <div className="flex items-center gap-4">

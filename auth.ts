@@ -29,15 +29,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         age: { type: 'text' },
         password: { type: 'password' },
         emailOptin: { type: 'text' },
+        role: { type: 'text' },
       },
       async authorize(credentials) {
-        const { firstName, lastName, email, age, password, emailOptin } = credentials as {
+        const { firstName, lastName, email, age, password, emailOptin, role } = credentials as {
           firstName: string
           lastName: string
           email: string
           age: string
           password: string
           emailOptin: string
+          role: string
         }
 
         if (!firstName || !lastName || !email || !age || !password) return null
@@ -65,6 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           age: parseInt(age, 10),
           password_hash: passwordHash,
           email_optin: emailOptin === 'true',
+          role: role || 'high_school',
           updated_at: new Date().toISOString(),
         })
 
