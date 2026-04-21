@@ -10,46 +10,64 @@ export async function GET() {
 
   const supabase = getSupabase()
 
-  const { data: profile, error: profileErr } = await supabase
+  // Try by user_id first, fall back to email if not found
+  // (handles cases where user has multiple accounts, e.g. Google + credentials)
+  let { data: profile } = await supabase
     .from('tutor_profiles')
     .select('*')
     .eq('user_id', session.user.id)
     .single()
 
-  const { data: application, error: appErr } = await supabase
+  let { data: application } = await supabase
     .from('tutor_applications')
     .select('university, major, services_approved, name, application_status')
     .eq('user_id', session.user.id)
     .eq('application_status', 'approved')
     .single()
 
-  // Also check if user has ANY tutor application (regardless of status)
-  const { data: anyApplication, error: anyAppErr } = await supabase
+  // Fallback: look up by email if user_id didn't match
+  if (!application && session.user.email) {
+    const { data: appByEmail } = await supabase
+      .from('tutor_applications')
+      .select('university, major, services_approved, name, application_status, user_id')
+      .eq('email', session.user.email)
+      .eq('application_status', 'approved')
+      .single()
+
+    if (appByEmail) {
+      application = appByEmail
+
+      // Also try to find profile by the application's original user_id
+      if (!profile) {
+        const { data: profileByOriginal } = await supabase
+          .from('tutor_profiles')
+          .select('*')
+          .eq('user_id', appByEmail.user_id)
+          .single()
+        if (profileByOriginal) profile = profileByOriginal
+      }
+    }
+  }
+
+  // Check for any application (regardless of status) by user_id or email
+  let hasApplication = false
+  const { data: anyApp } = await supabase
     .from('tutor_applications')
-    .select('id, user_id, application_status')
+    .select('id')
     .eq('user_id', session.user.id)
     .single()
+  if (anyApp) {
+    hasApplication = true
+  } else if (session.user.email) {
+    const { data: anyAppByEmail } = await supabase
+      .from('tutor_applications')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+    if (anyAppByEmail) hasApplication = true
+  }
 
-  // Fetch all applications by email for debugging
-  const { data: appsByEmail } = await supabase
-    .from('tutor_applications')
-    .select('id, user_id, application_status, email')
-    .eq('email', session.user.email!)
-
-  return NextResponse.json({
-    profile,
-    application,
-    hasApplication: !!anyApplication,
-    _debug: {
-      sessionUserId: session.user.id,
-      sessionEmail: session.user.email,
-      profileErr: profileErr?.message,
-      appErr: appErr?.message,
-      anyAppErr: anyAppErr?.message,
-      anyApplication,
-      appsByEmail,
-    },
-  })
+  return NextResponse.json({ profile, application, hasApplication })
 }
 
 export async function POST(req: Request) {
@@ -61,12 +79,23 @@ export async function POST(req: Request) {
   const body = await req.json()
   const supabase = getSupabase()
 
-  const { data: application } = await supabase
+  let { data: application } = await supabase
     .from('tutor_applications')
     .select('id')
     .eq('user_id', session.user.id)
     .eq('application_status', 'approved')
     .single()
+
+  // Fallback: look up by email
+  if (!application && session.user.email) {
+    const { data: appByEmail } = await supabase
+      .from('tutor_applications')
+      .select('id')
+      .eq('email', session.user.email)
+      .eq('application_status', 'approved')
+      .single()
+    application = appByEmail
+  }
 
   if (!application) {
     return NextResponse.json({ error: 'No approved application found' }, { status: 403 })
