@@ -42,22 +42,23 @@ export function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: session } = useSession()
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
+  const [hasTutorApp, setHasTutorApp] = useState(false)
 
-  const userRole = session?.user?.role
-  const isTutor = userRole === 'college' || (!userRole && false)
+  const isTutor = hasTutorApp
   const profileHref = isTutor ? '/tutor/profile' : '/find-tutors'
 
   useEffect(() => {
-    if (!session?.user?.id || !isTutor) return
+    if (!session?.user?.id) return
     fetch('/api/tutor/profile')
       .then((r) => r.json())
-      .then(({ profile }) => {
+      .then(({ profile, application }) => {
+        if (application) setHasTutorApp(true)
         if (profile?.profile_photo) {
           setProfilePhoto(`/api/storage?path=${encodeURIComponent(profile.profile_photo)}`)
         }
       })
       .catch(() => {})
-  }, [session?.user?.id, isTutor])
+  }, [session?.user?.id])
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
