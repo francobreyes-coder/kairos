@@ -27,8 +27,8 @@ export default function AuthPage() {
   const router = useRouter()
 
   useEffect(() => {
-    if (session) router.push('/home')
-  }, [session, router])
+    if (session && !submitting) router.push('/home')
+  }, [session, router, submitting])
 
   if (status === 'loading' || session) {
     return (
