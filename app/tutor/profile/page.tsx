@@ -18,6 +18,7 @@ import {
   Camera,
   Trash2,
 } from 'lucide-react'
+import { PhotoCropModal } from '@/components/photo-crop-modal'
 
 const SUBJECT_OPTIONS = [
   'English / Writing',
@@ -102,6 +103,7 @@ export default function ProfileDashboard() {
   const [approvedServices, setApprovedServices] = useState<string[]>([])
   const [tutorName, setTutorName] = useState('')
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [cropSrc, setCropSrc] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -196,15 +198,23 @@ export default function ProfileDashboard() {
   }
 
   function getPhotoUrl(path: string) {
-    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/application-files/${path}`
+    return `/api/storage?path=${encodeURIComponent(path)}`
   }
 
-  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setCropSrc(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  async function handleCroppedPhoto(blob: Blob) {
+    setCropSrc(null)
     setUploadingPhoto(true)
     const form = new FormData()
-    form.append('file', file)
+    form.append('file', new File([blob], 'profile.png', { type: 'image/png' }))
     form.append('fileType', 'profile-photo')
     const res = await fetch('/api/upload', { method: 'POST', body: form })
     const { path } = await res.json()
@@ -294,18 +304,22 @@ export default function ProfileDashboard() {
                     <img
                       src={getPhotoUrl(profile.profilePhoto)}
                       alt="Profile"
-                      className="w-24 h-24 rounded-2xl object-cover border-2 border-border"
+                      className="w-24 h-24 rounded-full object-cover border-2 border-border"
                     />
                     <button
                       type="button"
                       onClick={removePhoto}
-                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
+                    <label className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-accent text-white flex items-center justify-center cursor-pointer hover:bg-accent/90 transition-colors shadow-md">
+                      <Camera className="w-3.5 h-3.5" />
+                      <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+                    </label>
                   </div>
                 ) : (
-                  <label className="w-24 h-24 rounded-2xl border-2 border-dashed border-border hover:border-accent/50 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors bg-secondary/50">
+                  <label className="w-24 h-24 rounded-full border-2 border-dashed border-border hover:border-accent/50 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors bg-secondary/50">
                     {uploadingPhoto ? (
                       <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                     ) : (
@@ -317,7 +331,7 @@ export default function ProfileDashboard() {
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handlePhotoUpload}
+                      onChange={handlePhotoSelect}
                       className="hidden"
                       disabled={uploadingPhoto}
                     />
@@ -329,13 +343,20 @@ export default function ProfileDashboard() {
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handlePhotoUpload}
+                      onChange={handlePhotoSelect}
                       className="hidden"
                       disabled={uploadingPhoto}
                     />
                   </label>
                 )}
               </div>
+              {cropSrc && (
+                <PhotoCropModal
+                  imageSrc={cropSrc}
+                  onCrop={handleCroppedPhoto}
+                  onCancel={() => setCropSrc(null)}
+                />
+              )}
             </div>
 
             {/* Bio */}
