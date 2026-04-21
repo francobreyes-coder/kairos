@@ -10,13 +10,13 @@ export async function GET() {
 
   const supabase = getSupabase()
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileErr } = await supabase
     .from('tutor_profiles')
     .select('*')
     .eq('user_id', session.user.id)
     .single()
 
-  const { data: application } = await supabase
+  const { data: application, error: appErr } = await supabase
     .from('tutor_applications')
     .select('university, major, services_approved, name, application_status')
     .eq('user_id', session.user.id)
@@ -24,14 +24,32 @@ export async function GET() {
     .single()
 
   // Also check if user has ANY tutor application (regardless of status)
-  // so the header can route to /tutor/profile instead of /find-tutors
-  const { data: anyApplication } = await supabase
+  const { data: anyApplication, error: anyAppErr } = await supabase
     .from('tutor_applications')
-    .select('id')
+    .select('id, user_id, application_status')
     .eq('user_id', session.user.id)
     .single()
 
-  return NextResponse.json({ profile, application, hasApplication: !!anyApplication })
+  // Fetch all applications by email for debugging
+  const { data: appsByEmail } = await supabase
+    .from('tutor_applications')
+    .select('id, user_id, application_status, email')
+    .eq('email', session.user.email!)
+
+  return NextResponse.json({
+    profile,
+    application,
+    hasApplication: !!anyApplication,
+    _debug: {
+      sessionUserId: session.user.id,
+      sessionEmail: session.user.email,
+      profileErr: profileErr?.message,
+      appErr: appErr?.message,
+      anyAppErr: anyAppErr?.message,
+      anyApplication,
+      appsByEmail,
+    },
+  })
 }
 
 export async function POST(req: Request) {
