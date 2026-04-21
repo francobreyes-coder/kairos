@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No approved application found' }, { status: 403 })
   }
 
-  const profileData = {
+  const profileData: Record<string, unknown> = {
     user_id: session.user.id,
     bio: body.bio ?? '',
     subjects: body.subjects ?? [],
@@ -58,6 +58,10 @@ export async function POST(req: Request) {
     services: body.services ?? [],
     profile_completed: body.profileCompleted ?? false,
     updated_at: new Date().toISOString(),
+  }
+
+  if (body.profilePhoto !== undefined) {
+    profileData.profile_photo = body.profilePhoto
   }
 
   const { error } = await supabase

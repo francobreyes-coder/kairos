@@ -16,6 +16,8 @@ import {
   Calendar,
   Eye,
   X,
+  Camera,
+  Trash2,
 } from 'lucide-react'
 
 const STEPS = [
@@ -83,6 +85,7 @@ const TIME_SLOTS = [
 
 interface ProfileData {
   bio: string
+  profilePhoto: string
   subjects: string[]
   college: string
   major: string
@@ -94,6 +97,7 @@ interface ProfileData {
 
 const emptyProfile: ProfileData = {
   bio: '',
+  profilePhoto: '',
   subjects: [],
   college: '',
   major: '',
@@ -147,6 +151,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [approvedServices, setApprovedServices] = useState<string[]>([])
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -177,6 +182,7 @@ export default function OnboardingPage() {
           major: existing?.major || application.major || '',
           services: existing?.services?.length ? existing.services : approved,
           bio: existing?.bio || '',
+          profilePhoto: existing?.profile_photo || '',
           subjects: existing?.subjects || [],
           interests: existing?.interests || [],
           teachingStyle: existing?.teaching_style || '',
@@ -206,6 +212,33 @@ export default function OnboardingPage() {
         : [...daySlots, slot]
       return { ...p, availability: { ...p.availability, [day]: updated } }
     })
+  }
+
+  function getPhotoUrl(path: string) {
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/application-files/${path}`
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('fileType', 'profile-photo')
+    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    const { path } = await res.json()
+    if (path) update('profilePhoto', path)
+    setUploadingPhoto(false)
+  }
+
+  async function removePhoto() {
+    if (!profile.profilePhoto) return
+    await fetch('/api/upload', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: profile.profilePhoto }),
+    })
+    update('profilePhoto', '')
   }
 
   async function saveProgress() {
@@ -311,6 +344,59 @@ export default function OnboardingPage() {
                 <div>
                   <h2 className="text-xl font-semibold text-foreground mb-1">Tell us about yourself</h2>
                   <p className="text-sm text-muted-foreground">This will be shown to students browsing tutors.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1.5">
+                    Profile Photo
+                  </label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Upload a semi-professional headshot from the shoulders up — this is the first thing students see.
+                  </p>
+                  <div className="flex items-center gap-5">
+                    {profile.profilePhoto ? (
+                      <div className="relative group">
+                        <img
+                          src={getPhotoUrl(profile.profilePhoto)}
+                          alt="Profile"
+                          className="w-24 h-24 rounded-2xl object-cover border-2 border-border"
+                        />
+                        <button
+                          type="button"
+                          onClick={removePhoto}
+                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="w-24 h-24 rounded-2xl border-2 border-dashed border-border hover:border-accent/50 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors bg-secondary/50">
+                        {uploadingPhoto ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <>
+                            <Camera className="w-5 h-5 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">Upload</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="hidden"
+                          disabled={uploadingPhoto}
+                        />
+                      </label>
+                    )}
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>Tips for a great photo:</p>
+                      <ul className="list-disc ml-4 space-y-0.5">
+                        <li>Shoulders up, good lighting</li>
+                        <li>Friendly, natural expression</li>
+                        <li>Plain or simple background</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -542,6 +628,16 @@ export default function OnboardingPage() {
                 </div>
 
                 <div className="space-y-5">
+                  {profile.profilePhoto && (
+                    <div className="flex justify-center">
+                      <img
+                        src={getPhotoUrl(profile.profilePhoto)}
+                        alt="Profile"
+                        className="w-28 h-28 rounded-2xl object-cover border-2 border-border"
+                      />
+                    </div>
+                  )}
+
                   <PreviewSection title="Bio">
                     <p className="text-sm text-foreground whitespace-pre-wrap">{profile.bio || '—'}</p>
                   </PreviewSection>

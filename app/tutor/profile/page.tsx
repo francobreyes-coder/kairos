@@ -15,6 +15,8 @@ import {
   Briefcase,
   Calendar,
   User,
+  Camera,
+  Trash2,
 } from 'lucide-react'
 
 const SUBJECT_OPTIONS = [
@@ -73,6 +75,7 @@ const TIME_SLOTS = [
 
 interface ProfileData {
   bio: string
+  profilePhoto: string
   subjects: string[]
   college: string
   major: string
@@ -85,7 +88,7 @@ interface ProfileData {
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
 
-type Section = 'bio' | 'academic' | 'interests' | 'services' | 'availability' | null
+type Section = 'photo' | 'bio' | 'academic' | 'interests' | 'services' | 'availability' | null
 
 export default function ProfileDashboard() {
   const { data: session, status } = useSession()
@@ -98,6 +101,7 @@ export default function ProfileDashboard() {
   const [editing, setEditing] = useState<Section>(null)
   const [approvedServices, setApprovedServices] = useState<string[]>([])
   const [tutorName, setTutorName] = useState('')
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -124,6 +128,7 @@ export default function ProfileDashboard() {
 
         const loaded: ProfileData = {
           bio: existing.bio ?? '',
+          profilePhoto: existing.profile_photo ?? '',
           subjects: existing.subjects ?? [],
           college: existing.college ?? '',
           major: existing.major ?? '',
@@ -190,6 +195,51 @@ export default function ProfileDashboard() {
     })
   }
 
+  function getPhotoUrl(path: string) {
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/application-files/${path}`
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('fileType', 'profile-photo')
+    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    const { path } = await res.json()
+    if (path) {
+      const updated = { ...profile!, profilePhoto: path }
+      await fetch('/api/tutor/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updated, profileCompleted: true }),
+      })
+      setProfile(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+    setUploadingPhoto(false)
+  }
+
+  async function removePhoto() {
+    if (!profile?.profilePhoto) return
+    await fetch('/api/upload', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: profile.profilePhoto }),
+    })
+    const updated = { ...profile, profilePhoto: '' }
+    await fetch('/api/tutor/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...updated, profileCompleted: true }),
+    })
+    setProfile(updated)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
   if (loading || status === 'loading') {
     return (
       <>
@@ -228,6 +278,65 @@ export default function ProfileDashboard() {
           </div>
 
           <div className="space-y-5">
+
+            {/* Profile Photo */}
+            <div className="rounded-2xl bg-card border border-border p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Camera className="w-4 h-4 text-accent" />
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Profile Photo</h2>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                A semi-professional headshot from the shoulders up — this is the first thing students see.
+              </p>
+              <div className="flex items-center gap-5">
+                {profile.profilePhoto ? (
+                  <div className="relative group">
+                    <img
+                      src={getPhotoUrl(profile.profilePhoto)}
+                      alt="Profile"
+                      className="w-24 h-24 rounded-2xl object-cover border-2 border-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="w-24 h-24 rounded-2xl border-2 border-dashed border-border hover:border-accent/50 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors bg-secondary/50">
+                    {uploadingPhoto ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <>
+                        <Camera className="w-5 h-5 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground">Upload</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      disabled={uploadingPhoto}
+                    />
+                  </label>
+                )}
+                {profile.profilePhoto && (
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+                    <Pencil className="w-3 h-3" /> Change photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      disabled={uploadingPhoto}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
 
             {/* Bio */}
             <DashboardCard
