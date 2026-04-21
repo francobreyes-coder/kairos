@@ -168,6 +168,12 @@ export default function StudentOnboardingPage() {
     }
     if (status !== 'authenticated') return
 
+    // Only high school students should access this onboarding
+    if (session?.user?.role && session.user.role !== 'high_school') {
+      router.push('/home')
+      return
+    }
+
     fetch('/api/student/profile')
       .then((r) => r.json())
       .then(({ student: existing }) => {
@@ -189,7 +195,7 @@ export default function StudentOnboardingPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [status, router])
+  }, [status, router, session])
 
   function update<K extends keyof StudentData>(key: K, value: StudentData[K]) {
     setStudent((p) => ({ ...p, [key]: value }))

@@ -115,9 +115,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/auth',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id
+      }
+      // Fetch role from DB on first sign-in or when refreshed
+      if (user || trigger === 'update') {
+        const supabase = getSupabase()
+        const { data } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', token.sub ?? user?.id)
+          .single()
+        token.role = data?.role ?? null
       }
       return token
     },
@@ -125,6 +135,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user && token.sub) {
         session.user.id = token.sub
       }
+      session.user.role = (token.role as string) ?? null
       return session
     },
   },

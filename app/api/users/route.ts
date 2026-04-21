@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { emailOptin, firstName, lastName, contactEmail, age } = await req.json()
+  const { emailOptin, firstName, lastName, contactEmail, age, role } = await req.json()
   const supabase = getSupabase()
 
   const { data: existing } = await supabase
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       last_name: lastName ?? '',
       contact_email: contactEmail ?? session.user.email,
       age: age ? parseInt(age, 10) : null,
+      ...(role && { role }),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'id' }

@@ -80,7 +80,8 @@ export default function AuthPage() {
     })
 
     if (result?.error) {
-      setError('Invalid email or password.')
+      setError("We couldn't find an account with those credentials. Try creating one instead.")
+      setMode('create')
       setSubmitting(false)
     } else {
       router.push('/home')

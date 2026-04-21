@@ -43,8 +43,12 @@ export function Header() {
   const { data: session } = useSession()
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
 
+  const userRole = session?.user?.role
+  const isTutor = userRole === 'college' || (!userRole && false)
+  const profileHref = isTutor ? '/tutor/profile' : '/find-tutors'
+
   useEffect(() => {
-    if (!session?.user?.id) return
+    if (!session?.user?.id || !isTutor) return
     fetch('/api/tutor/profile')
       .then((r) => r.json())
       .then(({ profile }) => {
@@ -53,7 +57,7 @@ export function Header() {
         }
       })
       .catch(() => {})
-  }, [session?.user?.id])
+  }, [session?.user?.id, isTutor])
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -109,7 +113,7 @@ export function Header() {
                         <p className="text-xs text-muted-foreground truncate">{session.user?.email}</p>
                       </div>
                       <Link
-                        href="/tutor/profile"
+                        href={profileHref}
                         onClick={() => setUserMenuOpen(false)}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                       >
@@ -177,7 +181,7 @@ export function Header() {
                 </div>
                 <div className="flex items-center gap-4">
                   <Link
-                    href="/tutor/profile"
+                    href={profileHref}
                     onClick={() => setMobileMenuOpen(false)}
                     className="text-sm text-accent hover:text-accent/80 font-medium"
                   >
