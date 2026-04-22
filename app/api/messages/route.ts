@@ -2,27 +2,67 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 
-// Resolve all user IDs associated with this session (handles Google OAuth vs Credentials mismatch)
-async function resolveUserIds(sessionUserId: string, sessionEmail: string | null | undefined) {
-  const ids = new Set<string>([sessionUserId])
-  if (!sessionEmail) return ids
-
+// Resolve all user IDs linked to the same person.
+// Works from a session (with email) or from just an ID (for partners).
+async function resolveAllIds(userId: string, email?: string | null) {
+  const ids = new Set<string>([userId])
   const supabase = getSupabase()
 
-  // Check if there's a credentials-based account with the same email
-  const { data: userByEmail } = await supabase
+  // Step 1: find the user's real email if not provided
+  let realEmail = email
+  if (!realEmail) {
+    const { data: user } = await supabase
+      .from('users')
+      .select('email, contact_email')
+      .eq('id', userId)
+      .single()
+
+    if (user) {
+      // Use email field (real email), not contact_email (might be "google:xxx")
+      realEmail = user.email || (user.contact_email?.startsWith('google:') ? null : user.contact_email)
+    }
+  }
+
+  // Step 2: if we still don't have an email, check tutor_applications
+  if (!realEmail) {
+    const { data: app } = await supabase
+      .from('tutor_applications')
+      .select('email, user_id')
+      .eq('user_id', userId)
+      .single()
+
+    if (app?.email) {
+      realEmail = app.email
+      ids.add(app.user_id)
+    }
+  }
+
+  if (!realEmail) return ids
+
+  // Step 3: find ALL user IDs sharing this email
+  const { data: usersByEmail } = await supabase
     .from('users')
     .select('id')
-    .eq('contact_email', sessionEmail)
-    .single()
+    .eq('email', realEmail)
 
-  if (userByEmail) ids.add(userByEmail.id)
+  if (usersByEmail) {
+    for (const u of usersByEmail) ids.add(u.id)
+  }
 
-  // Check if there's a tutor application with the same email
+  const { data: usersByContact } = await supabase
+    .from('users')
+    .select('id')
+    .eq('contact_email', realEmail)
+
+  if (usersByContact) {
+    for (const u of usersByContact) ids.add(u.id)
+  }
+
+  // Step 4: check tutor_applications for this email
   const { data: appByEmail } = await supabase
     .from('tutor_applications')
     .select('user_id')
-    .eq('email', sessionEmail)
+    .eq('email', realEmail)
     .eq('application_status', 'approved')
     .single()
 
@@ -39,16 +79,22 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = getSupabase()
-  const userIds = await resolveUserIds(session.user.id, session.user.email)
-  const idArray = Array.from(userIds)
+  const myIds = await resolveAllIds(session.user.id, session.user.email)
+  const myIdArray = Array.from(myIds)
   const withUser = req.nextUrl.searchParams.get('with')
 
   if (withUser) {
-    // Also resolve the partner's IDs (they might have multiple auth accounts too)
-    const orClauses = idArray.flatMap((uid) => [
-      `and(sender_id.eq.${uid},receiver_id.eq.${withUser})`,
-      `and(sender_id.eq.${withUser},receiver_id.eq.${uid})`,
-    ])
+    // Resolve the PARTNER's IDs too — they may have sent messages from a different auth account
+    const partnerIds = await resolveAllIds(withUser)
+    const partnerIdArray = Array.from(partnerIds)
+
+    // Find all messages between any of my IDs and any of the partner's IDs
+    const orClauses = myIdArray.flatMap((uid) =>
+      partnerIdArray.flatMap((pid) => [
+        `and(sender_id.eq.${uid},receiver_id.eq.${pid})`,
+        `and(sender_id.eq.${pid},receiver_id.eq.${uid})`,
+      ])
+    )
 
     const { data: messages, error } = await supabase
       .from('messages')
@@ -57,51 +103,77 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: true })
 
     if (error) {
+      console.error('Failed to fetch messages:', JSON.stringify(error, null, 2))
       return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
     }
 
-    return NextResponse.json({ messages: messages ?? [], myIds: idArray })
+    return NextResponse.json({ messages: messages ?? [], myIds: myIdArray })
   }
 
-  // Fetch conversation list — all unique users this user has messaged with
+  // Fetch conversation list — all messages involving any of my IDs
   const { data: sent, error: sentErr } = await supabase
     .from('messages')
     .select('receiver_id, content, created_at')
-    .in('sender_id', idArray)
+    .in('sender_id', myIdArray)
     .order('created_at', { ascending: false })
 
   const { data: received, error: recvErr } = await supabase
     .from('messages')
     .select('sender_id, sender_name, content, created_at')
-    .in('receiver_id', idArray)
+    .in('receiver_id', myIdArray)
     .order('created_at', { ascending: false })
 
   if (sentErr || recvErr) {
+    console.error('Failed to fetch conversations:', sentErr, recvErr)
     return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 })
   }
 
-  // Build a map of conversations: other user ID -> latest message
+  // For each partner, resolve ALL their IDs so we can merge conversations
+  // First, collect all unique partner IDs
+  const rawPartnerIds = new Set<string>()
+  for (const m of sent ?? []) {
+    if (!myIds.has(m.receiver_id)) rawPartnerIds.add(m.receiver_id)
+  }
+  for (const m of received ?? []) {
+    if (!myIds.has(m.sender_id)) rawPartnerIds.add(m.sender_id)
+  }
+
+  // Resolve each partner's IDs and build a mapping: any partner ID -> canonical partner ID
+  const canonicalMap = new Map<string, string>() // partnerId -> canonical (first resolved ID)
+  const resolvedGroups: { canonical: string; allIds: Set<string> }[] = []
+
+  for (const pid of rawPartnerIds) {
+    if (canonicalMap.has(pid)) continue // already resolved via another ID
+    const allIds = await resolveAllIds(pid)
+    const canonical = pid // use the first-seen ID as canonical
+    for (const id of allIds) {
+      canonicalMap.set(id, canonical)
+    }
+    resolvedGroups.push({ canonical, allIds })
+  }
+
+  // Build conversation map using canonical IDs
   const convMap = new Map<string, { content: string; created_at: string; is_sender: boolean }>()
-  // Track sender names from messages themselves (reliable fallback)
   const senderNameMap = new Map<string, string>()
 
   for (const m of sent ?? []) {
-    if (userIds.has(m.receiver_id)) continue
-    const existing = convMap.get(m.receiver_id)
+    if (myIds.has(m.receiver_id)) continue
+    const canonical = canonicalMap.get(m.receiver_id) ?? m.receiver_id
+    const existing = convMap.get(canonical)
     if (!existing || m.created_at > existing.created_at) {
-      convMap.set(m.receiver_id, { content: m.content, created_at: m.created_at, is_sender: true })
+      convMap.set(canonical, { content: m.content, created_at: m.created_at, is_sender: true })
     }
   }
 
   for (const m of received ?? []) {
-    if (userIds.has(m.sender_id)) continue
-    const existing = convMap.get(m.sender_id)
+    if (myIds.has(m.sender_id)) continue
+    const canonical = canonicalMap.get(m.sender_id) ?? m.sender_id
+    const existing = convMap.get(canonical)
     if (!existing || m.created_at > existing.created_at) {
-      convMap.set(m.sender_id, { content: m.content, created_at: m.created_at, is_sender: false })
+      convMap.set(canonical, { content: m.content, created_at: m.created_at, is_sender: false })
     }
-    // Save the sender_name from the message itself
     if (m.sender_name) {
-      senderNameMap.set(m.sender_id, m.sender_name)
+      senderNameMap.set(canonical, m.sender_name)
     }
   }
 
@@ -110,28 +182,43 @@ export async function GET(req: NextRequest) {
   const nameMap = new Map<string, string>()
 
   if (partnerIds.length > 0) {
-    // Check users table by ID
+    // Collect all IDs across all resolved groups for these partners
+    const allPartnerIds = new Set<string>()
+    for (const pid of partnerIds) {
+      allPartnerIds.add(pid)
+      const group = resolvedGroups.find((g) => g.canonical === pid)
+      if (group) {
+        for (const id of group.allIds) allPartnerIds.add(id)
+      }
+    }
+    const allPartnerIdArray = Array.from(allPartnerIds)
+
+    // Check users table
     const { data: users } = await supabase
       .from('users')
       .select('id, name')
-      .in('id', partnerIds)
+      .in('id', allPartnerIdArray)
 
     if (users) {
       for (const u of users) {
-        if (u.name) nameMap.set(u.id, u.name)
+        if (u.name) {
+          const canonical = canonicalMap.get(u.id) ?? u.id
+          if (!nameMap.has(canonical)) nameMap.set(canonical, u.name)
+        }
       }
     }
 
-    // Check tutor_applications by user_id
+    // Check tutor_applications
     const { data: apps } = await supabase
       .from('tutor_applications')
       .select('user_id, name')
-      .in('user_id', partnerIds)
+      .in('user_id', allPartnerIdArray)
       .eq('application_status', 'approved')
 
     if (apps) {
       for (const a of apps) {
-        nameMap.set(a.user_id, a.name)
+        const canonical = canonicalMap.get(a.user_id) ?? a.user_id
+        nameMap.set(canonical, a.name) // tutor app name takes priority
       }
     }
 
@@ -139,11 +226,14 @@ export async function GET(req: NextRequest) {
     const { data: students } = await supabase
       .from('students')
       .select('user_id, name')
-      .in('user_id', partnerIds)
+      .in('user_id', allPartnerIdArray)
 
     if (students) {
       for (const s of students) {
-        if (s.name && !nameMap.has(s.user_id)) nameMap.set(s.user_id, s.name)
+        if (s.name) {
+          const canonical = canonicalMap.get(s.user_id) ?? s.user_id
+          if (!nameMap.has(canonical)) nameMap.set(canonical, s.name)
+        }
       }
     }
 
@@ -166,7 +256,7 @@ export async function GET(req: NextRequest) {
     })
     .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at))
 
-  return NextResponse.json({ conversations, myIds: idArray })
+  return NextResponse.json({ conversations, myIds: myIdArray })
 }
 
 // POST /api/messages — send a message
@@ -183,9 +273,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing receiver or content' }, { status: 400 })
   }
 
-  const userIds = await resolveUserIds(session.user.id, session.user.email)
+  const myIds = await resolveAllIds(session.user.id, session.user.email)
 
-  if (userIds.has(receiverId)) {
+  if (myIds.has(receiverId)) {
     return NextResponse.json({ error: 'Cannot message yourself' }, { status: 400 })
   }
 
@@ -194,7 +284,6 @@ export async function POST(req: NextRequest) {
   // Resolve the sender's display name
   let senderName = session.user.name ?? ''
   if (!senderName && session.user.email) {
-    // Try to get name from users table
     const { data: u } = await supabase
       .from('users')
       .select('name')
