@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 
+// Resolve all user IDs associated with this session (handles Google OAuth vs Credentials mismatch)
+async function resolveUserIds(sessionUserId: string, sessionEmail: string | null | undefined) {
+  const ids = new Set<string>([sessionUserId])
+  if (!sessionEmail) return ids
+
+  const supabase = getSupabase()
+
+  // Check if there's a credentials-based account with the same email
+  const { data: userByEmail } = await supabase
+    .from('users')
+    .select('id')
+    .eq('contact_email', sessionEmail)
+    .single()
+
+  if (userByEmail) ids.add(userByEmail.id)
+
+  // Check if there's a tutor application with the same email
+  const { data: appByEmail } = await supabase
+    .from('tutor_applications')
+    .select('user_id')
+    .eq('email', sessionEmail)
+    .eq('application_status', 'approved')
+    .single()
+
+  if (appByEmail) ids.add(appByEmail.user_id)
+
+  return ids
+}
+
 // GET /api/messages — fetch conversations or messages with a specific user
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -9,18 +38,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const userId = session.user.id
   const supabase = getSupabase()
+  const userIds = await resolveUserIds(session.user.id, session.user.email)
+  const idArray = Array.from(userIds)
   const withUser = req.nextUrl.searchParams.get('with')
 
   if (withUser) {
-    // Fetch messages between current user and specified user
+    // Fetch messages between current user (any of their IDs) and specified user
+    const orClauses = idArray.flatMap((uid) => [
+      `and(sender_id.eq.${uid},receiver_id.eq.${withUser})`,
+      `and(sender_id.eq.${withUser},receiver_id.eq.${uid})`,
+    ])
+
     const { data: messages, error } = await supabase
       .from('messages')
       .select('*')
-      .or(
-        `and(sender_id.eq.${userId},receiver_id.eq.${withUser}),and(sender_id.eq.${withUser},receiver_id.eq.${userId})`
-      )
+      .or(orClauses.join(','))
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -34,13 +67,13 @@ export async function GET(req: NextRequest) {
   const { data: sent, error: sentErr } = await supabase
     .from('messages')
     .select('receiver_id, content, created_at')
-    .eq('sender_id', userId)
+    .in('sender_id', idArray)
     .order('created_at', { ascending: false })
 
   const { data: received, error: recvErr } = await supabase
     .from('messages')
     .select('sender_id, content, created_at')
-    .eq('receiver_id', userId)
+    .in('receiver_id', idArray)
     .order('created_at', { ascending: false })
 
   if (sentErr || recvErr) {
@@ -51,6 +84,8 @@ export async function GET(req: NextRequest) {
   const convMap = new Map<string, { content: string; created_at: string; is_sender: boolean }>()
 
   for (const m of sent ?? []) {
+    // Skip if the receiver is also one of our IDs (self-message across accounts)
+    if (userIds.has(m.receiver_id)) continue
     const existing = convMap.get(m.receiver_id)
     if (!existing || m.created_at > existing.created_at) {
       convMap.set(m.receiver_id, { content: m.content, created_at: m.created_at, is_sender: true })
@@ -58,6 +93,7 @@ export async function GET(req: NextRequest) {
   }
 
   for (const m of received ?? []) {
+    if (userIds.has(m.sender_id)) continue
     const existing = convMap.get(m.sender_id)
     if (!existing || m.created_at > existing.created_at) {
       convMap.set(m.sender_id, { content: m.content, created_at: m.created_at, is_sender: false })
@@ -124,10 +160,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing receiver or content' }, { status: 400 })
   }
 
-  if (receiverId === session.user.id) {
+  // Resolve sender's canonical ID (use tutor application ID if they have one, otherwise session ID)
+  const userIds = await resolveUserIds(session.user.id, session.user.email)
+
+  if (userIds.has(receiverId)) {
     return NextResponse.json({ error: 'Cannot message yourself' }, { status: 400 })
   }
 
+  // Use the session user ID as sender (consistent with what the client sees)
   const supabase = getSupabase()
 
   const insertData: Record<string, unknown> = {
