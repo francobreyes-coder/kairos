@@ -11,19 +11,12 @@ export async function GET() {
 
   const supabase = getSupabase()
 
-  // Fetch the student's profile
-  const { data: student, error: studentErr } = await supabase
+  // Fetch the student's profile (may not exist if user is a tutor/admin)
+  const { data: student } = await supabase
     .from('students')
     .select('interests, intended_major, colleges_of_interest, goals, preferred_teaching_style, tutor_personality')
     .eq('user_id', session.user.id)
     .single()
-
-  if (studentErr || !student) {
-    return NextResponse.json(
-      { error: 'Student profile not found. Complete onboarding first.' },
-      { status: 404 }
-    )
-  }
 
   // Fetch all completed tutor profiles
   const { data: tutors, error: tutorErr } = await supabase
@@ -99,12 +92,12 @@ export async function GET() {
   }
 
   const studentProfile: StudentProfile = {
-    interests: student.interests ?? [],
-    intended_major: student.intended_major ?? '',
-    colleges_of_interest: student.colleges_of_interest ?? [],
-    goals: student.goals ?? [],
-    preferred_teaching_style: student.preferred_teaching_style ?? '',
-    tutor_personality: student.tutor_personality ?? [],
+    interests: student?.interests ?? [],
+    intended_major: student?.intended_major ?? '',
+    colleges_of_interest: student?.colleges_of_interest ?? [],
+    goals: student?.goals ?? [],
+    preferred_teaching_style: student?.preferred_teaching_style ?? '',
+    tutor_personality: student?.tutor_personality ?? [],
   }
 
   const ranked = rankTutors(studentProfile, tutors as TutorProfile[])
