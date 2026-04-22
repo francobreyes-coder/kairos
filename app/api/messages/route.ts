@@ -147,8 +147,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('Failed to send message:', error)
-    return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
+    console.error('Failed to send message:', JSON.stringify(error, null, 2))
+    return NextResponse.json({ error: `Failed to send message: ${error.message}` }, { status: 500 })
   }
 
   return NextResponse.json({ message }, { status: 201 })
