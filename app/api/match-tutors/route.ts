@@ -39,18 +39,62 @@ export async function GET() {
     return NextResponse.json({ matches: [] })
   }
 
-  // Fetch tutor names from their applications
+  // Fetch tutor names — try multiple sources to handle user_id mismatches
+  // (e.g. tutor applied with credentials but completed profile with Google)
   const tutorUserIds = tutors.map((t) => t.user_id)
+  const nameMap = new Map<string, string>()
+
+  // 1. Direct user_id match on approved applications
   const { data: applications } = await supabase
     .from('tutor_applications')
     .select('user_id, name')
     .in('user_id', tutorUserIds)
     .eq('application_status', 'approved')
 
-  const nameMap = new Map<string, string>()
   if (applications) {
     for (const app of applications) {
       nameMap.set(app.user_id, app.name)
+    }
+  }
+
+  // 2. For tutors still missing names, try email-based lookup via users table
+  const missingIds = tutorUserIds.filter((id) => !nameMap.has(id))
+  if (missingIds.length > 0) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .in('id', missingIds)
+
+    if (users) {
+      const emailToUserId = new Map<string, string>()
+      for (const u of users) {
+        // Use the users table name as a fallback
+        if (u.name && !nameMap.has(u.id)) {
+          nameMap.set(u.id, u.name)
+        }
+        if (u.email) {
+          emailToUserId.set(u.email, u.id)
+        }
+      }
+
+      // Also try matching applications by email for name resolution
+      if (emailToUserId.size > 0) {
+        const emails = Array.from(emailToUserId.keys())
+        const { data: appsByEmail } = await supabase
+          .from('tutor_applications')
+          .select('email, name')
+          .in('email', emails)
+          .eq('application_status', 'approved')
+
+        if (appsByEmail) {
+          for (const app of appsByEmail) {
+            const userId = emailToUserId.get(app.email)
+            if (userId && app.name) {
+              nameMap.set(userId, app.name)
+            }
+          }
+        }
+      }
     }
   }
 
