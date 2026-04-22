@@ -84,20 +84,67 @@ export async function GET(req: NextRequest) {
   // Debug param — add ?debug=1 to see ID resolution
   const debug = req.nextUrl.searchParams.get('debug')
 
+  if (debug) {
+    // Trace every step of resolveAllIds
+    const trace: Record<string, unknown> = {
+      sessionUserId: session.user.id,
+      sessionEmail: session.user.email,
+      sessionName: session.user.name,
+    }
+
+    const email = session.user.email
+    // Step 1: check users.email
+    const { data: byEmail, error: e1 } = await supabase
+      .from('users')
+      .select('id, email, contact_email, name')
+      .eq('email', email ?? '')
+    trace.usersByEmail = { data: byEmail, error: e1 }
+
+    // Step 2: check users.contact_email
+    const { data: byContact, error: e2 } = await supabase
+      .from('users')
+      .select('id, email, contact_email, name')
+      .eq('contact_email', email ?? '')
+    trace.usersByContactEmail = { data: byContact, error: e2 }
+
+    // Step 3: check tutor_applications
+    const { data: tutorApp, error: e3 } = await supabase
+      .from('tutor_applications')
+      .select('user_id, email, application_status')
+      .eq('email', email ?? '')
+    trace.tutorApplications = { data: tutorApp, error: e3 }
+
+    // Step 4: resolved IDs
+    trace.resolvedMyIds = myIdArray
+
+    // Step 5: if withUser, resolve partner too
+    if (withUser) {
+      const { data: partnerUser, error: e4 } = await supabase
+        .from('users')
+        .select('id, email, contact_email, name')
+        .eq('id', withUser)
+      trace.partnerUserById = { data: partnerUser, error: e4 }
+
+      const partnerIds = await resolveAllIds(withUser)
+      trace.resolvedPartnerIds = Array.from(partnerIds)
+    }
+
+    // Step 6: all messages in db for any of my IDs
+    const { data: allMsgs, error: e5 } = await supabase
+      .from('messages')
+      .select('id, sender_id, receiver_id, content, created_at')
+      .or(myIdArray.map(id => `sender_id.eq.${id},receiver_id.eq.${id}`).join(','))
+      .order('created_at', { ascending: false })
+      .limit(20)
+    trace.myMessages = { data: allMsgs, error: e5 }
+
+    return NextResponse.json(trace)
+  }
+
   if (withUser) {
     // Resolve the PARTNER's IDs too
     const partnerIds = await resolveAllIds(withUser)
     const partnerIdArray = Array.from(partnerIds)
-
-    if (debug) {
-      return NextResponse.json({
-        myIds: myIdArray,
-        partnerIds: partnerIdArray,
-        sessionUserId: session.user.id,
-        sessionEmail: session.user.email,
-        sessionName: session.user.name,
-      })
-    }
 
     // Find all messages between any of my IDs and any of the partner's IDs
     const orClauses = myIdArray.flatMap((uid) =>
