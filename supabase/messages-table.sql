@@ -1,8 +1,8 @@
 -- Migration: create messages table for student-tutor messaging
 CREATE TABLE IF NOT EXISTS messages (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  sender_id text NOT NULL REFERENCES users(id),
-  receiver_id text NOT NULL REFERENCES users(id),
+  sender_id text NOT NULL,
+  receiver_id text NOT NULL,
   session_id uuid REFERENCES sessions(id),
   content text NOT NULL,
   created_at timestamptz DEFAULT now()
