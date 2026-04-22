@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu, X, LogOut, UserCircle, LayoutDashboard } from 'lucide-react'
+import { Menu, X, LogOut, UserCircle, LayoutDashboard, MessageSquare } from 'lucide-react'
 
 const navLinks = [
   { label: 'How It Works', target: 'how-it-works' },
@@ -156,6 +156,14 @@ export function Header() {
                         <UserCircle className="w-4 h-4" />
                         My Sessions
                       </Link>
+                      <Link
+                        href="/messages"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        Messages
+                      </Link>
                       <button
                         onClick={() => signOut()}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -238,6 +246,13 @@ export function Header() {
                     className="text-sm text-accent hover:text-accent/80 font-medium"
                   >
                     My Sessions
+                  </Link>
+                  <Link
+                    href="/messages"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-sm text-accent hover:text-accent/80 font-medium"
+                  >
+                    Messages
                   </Link>
                   <button
                     onClick={() => signOut()}

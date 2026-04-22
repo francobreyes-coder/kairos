@@ -9,6 +9,8 @@ import {
   Check,
   Clock,
   Calendar,
+  DollarSign,
+  CreditCard,
 } from 'lucide-react'
 
 interface SlotInfo {
@@ -20,11 +22,19 @@ interface SlotInfo {
 interface BookingModalProps {
   tutorId: string
   tutorName: string
+  services: string[]
+  servicePrices: Record<string, number>
   onClose: () => void
   onBooked: () => void
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+const SERVICE_LABELS: Record<string, string> = {
+  'essays': 'Essay Writing',
+  'sat-act': 'SAT/ACT Prep',
+  'activities': 'Activities',
+}
 
 function getMonday(offset: number): Date {
   const now = new Date()
@@ -48,18 +58,22 @@ function formatWeekRange(monday: Date): string {
   return `${monday.toLocaleDateString('en-US', opts)} – ${sunday.toLocaleDateString('en-US', opts)}`
 }
 
-export default function BookingModal({ tutorId, tutorName, onClose, onBooked }: BookingModalProps) {
+export default function BookingModal({ tutorId, tutorName, services, servicePrices, onClose, onBooked }: BookingModalProps) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [slots, setSlots] = useState<Record<string, SlotInfo[]>>({})
   const [dayDates, setDayDates] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<{ day: string; time: string; date: string } | null>(null)
+  const [selectedService, setSelectedService] = useState<string | null>(
+    services.length === 1 ? services[0] : null
+  )
   const [notes, setNotes] = useState('')
   const [booking, setBooking] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const monday = getMonday(weekOffset)
+  const selectedPrice = selectedService ? servicePrices[selectedService] : null
 
   useEffect(() => {
     setLoading(true)
@@ -77,12 +91,12 @@ export default function BookingModal({ tutorId, tutorName, onClose, onBooked }: 
   }, [tutorId, weekOffset])
 
   async function handleBook() {
-    if (!selected) return
+    if (!selected || !selectedService || !selectedPrice) return
     setBooking(true)
     setError(null)
 
     try {
-      const res = await fetch('/api/sessions', {
+      const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -91,27 +105,29 @@ export default function BookingModal({ tutorId, tutorName, onClose, onBooked }: 
           timeSlot: selected.time,
           scheduledDate: selected.date,
           notes,
+          service: selectedService,
         }),
       })
 
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error || 'Failed to book')
+        throw new Error(data.error || 'Failed to start checkout')
       }
 
-      setSuccess(true)
-      setTimeout(() => {
-        onBooked()
-        onClose()
-      }, 1500)
+      const { url } = await res.json()
+      if (url) {
+        window.location.href = url
+      } else {
+        throw new Error('No checkout URL returned')
+      }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to book session')
-    } finally {
+      setError(err instanceof Error ? err.message : 'Failed to start checkout')
       setBooking(false)
     }
   }
 
   const hasAnySlots = Object.values(slots).some((daySlots) => daySlots.length > 0)
+  const canBook = selected && selectedService && selectedPrice && selectedPrice > 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -140,14 +156,59 @@ export default function BookingModal({ tutorId, tutorName, onClose, onBooked }: 
               <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
                 <Check className="w-7 h-7 text-green-600" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Session Booked!</h3>
+              <h3 className="text-lg font-semibold text-foreground">Redirecting to payment...</h3>
               <p className="text-sm text-muted-foreground text-center">
-                Your session with {tutorName} on {selected?.date && formatDate(selected.date)} at{' '}
-                {selected?.time} has been confirmed.
+                You&apos;ll be redirected to Stripe to complete your booking.
               </p>
             </div>
           ) : (
             <>
+              {/* Step 1: Service selection */}
+              {services.length > 1 && (
+                <div className="mb-5">
+                  <label className="text-sm font-medium text-foreground mb-2 block">
+                    Select a service
+                  </label>
+                  <div className="grid gap-2">
+                    {services.map((svc) => {
+                      const price = servicePrices[svc]
+                      const isSelected = selectedService === svc
+                      return (
+                        <button
+                          key={svc}
+                          onClick={() => setSelectedService(isSelected ? null : svc)}
+                          className={`flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all ${
+                            isSelected
+                              ? 'border-accent bg-accent/5 ring-2 ring-accent/20'
+                              : 'border-border hover:border-accent/30 hover:bg-muted/50'
+                          }`}
+                        >
+                          <span className="text-sm font-medium text-foreground">
+                            {SERVICE_LABELS[svc] ?? svc}
+                          </span>
+                          {price > 0 && (
+                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-green-700">
+                              <DollarSign className="w-3.5 h-3.5" />
+                              {price}/hr
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Single service — show price banner */}
+              {services.length === 1 && selectedPrice && selectedPrice > 0 && (
+                <div className="mb-5 flex items-center gap-2 px-4 py-3 rounded-xl bg-green-50 border border-green-200">
+                  <DollarSign className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">
+                    {SERVICE_LABELS[services[0]] ?? services[0]} — ${selectedPrice}/hr
+                  </span>
+                </div>
+              )}
+
               {/* Week navigation */}
               <div className="flex items-center justify-between mb-5">
                 <button
@@ -247,6 +308,17 @@ export default function BookingModal({ tutorId, tutorName, onClose, onBooked }: 
                     </div>
                   )}
 
+                  {/* Price summary */}
+                  {canBook && (
+                    <div className="mb-4 p-3 rounded-xl bg-accent/5 border border-accent/10 flex items-center justify-between">
+                      <div className="text-sm text-foreground">
+                        <span className="font-medium">{SERVICE_LABELS[selectedService!] ?? selectedService}</span>
+                        {' '}· {selected!.day}, {formatDate(selected!.date)} at {selected!.time}
+                      </div>
+                      <div className="text-lg font-bold text-accent">${selectedPrice}</div>
+                    </div>
+                  )}
+
                   {error && (
                     <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
                       {error}
@@ -255,21 +327,30 @@ export default function BookingModal({ tutorId, tutorName, onClose, onBooked }: 
 
                   {/* Book button */}
                   <button
-                    disabled={!selected || booking}
+                    disabled={!canBook || booking}
                     onClick={handleBook}
                     className="w-full py-3 rounded-xl bg-accent text-accent-foreground font-medium text-sm hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {booking ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Booking...
+                        Redirecting to checkout...
                       </>
-                    ) : selected ? (
-                      `Book ${selected.day} at ${selected.time}`
+                    ) : canBook ? (
+                      <>
+                        <CreditCard className="w-4 h-4" />
+                        Pay ${selectedPrice} & Book
+                      </>
+                    ) : !selectedService ? (
+                      'Select a service'
                     ) : (
                       'Select a time slot'
                     )}
                   </button>
+
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    You&apos;ll be redirected to Stripe for secure payment
+                  </p>
                 </>
               )}
             </>

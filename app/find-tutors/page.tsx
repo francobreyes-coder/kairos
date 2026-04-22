@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   DollarSign,
+  MessageSquare,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
 
@@ -55,7 +56,7 @@ export default function FindTutorsPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
-  const [bookingTutor, setBookingTutor] = useState<{ id: string; name: string } | null>(null)
+  const [bookingTutor, setBookingTutor] = useState<{ id: string; name: string; services: string[]; servicePrices: Record<string, number> } | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -371,12 +372,21 @@ export default function FindTutorsPage() {
                           </>
                         )}
                       </button>
-                      <button
-                        onClick={() => setBookingTutor({ id: tutor.userId, name: tutor.name })}
-                        className="inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
-                      >
-                        Book Now
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => router.push(`/messages?with=${tutor.userId}&name=${encodeURIComponent(tutor.name)}`)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-accent/30 transition-colors"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          Message
+                        </button>
+                        <button
+                          onClick={() => setBookingTutor({ id: tutor.userId, name: tutor.name, services: tutor.services, servicePrices: tutor.servicePrices })}
+                          className="inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+                        >
+                          Book Now
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -390,6 +400,8 @@ export default function FindTutorsPage() {
         <BookingModal
           tutorId={bookingTutor.id}
           tutorName={bookingTutor.name}
+          services={bookingTutor.services}
+          servicePrices={bookingTutor.servicePrices}
           onClose={() => setBookingTutor(null)}
           onBooked={() => setBookingTutor(null)}
         />
