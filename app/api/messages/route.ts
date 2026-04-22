@@ -105,6 +105,7 @@ export async function GET(req: NextRequest) {
   const nameMap = new Map<string, string>()
 
   if (partnerIds.length > 0) {
+    // Check users table by ID
     const { data: users } = await supabase
       .from('users')
       .select('id, name')
@@ -112,11 +113,11 @@ export async function GET(req: NextRequest) {
 
     if (users) {
       for (const u of users) {
-        nameMap.set(u.id, u.name ?? 'Unknown')
+        if (u.name) nameMap.set(u.id, u.name)
       }
     }
 
-    // Also check tutor_applications for better names
+    // Check tutor_applications by user_id (may have a better display name)
     const { data: apps } = await supabase
       .from('tutor_applications')
       .select('user_id, name')
@@ -126,6 +127,18 @@ export async function GET(req: NextRequest) {
     if (apps) {
       for (const a of apps) {
         nameMap.set(a.user_id, a.name)
+      }
+    }
+
+    // Check students table for student names
+    const { data: students } = await supabase
+      .from('students')
+      .select('user_id, name')
+      .in('user_id', partnerIds)
+
+    if (students) {
+      for (const s of students) {
+        if (s.name && !nameMap.has(s.user_id)) nameMap.set(s.user_id, s.name)
       }
     }
   }

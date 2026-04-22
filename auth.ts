@@ -115,6 +115,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/auth',
   },
   callbacks: {
+    async signIn({ user, account }) {
+      // Ensure Google OAuth users have a row in the users table
+      if (account?.provider === 'google' && user.id && user.email) {
+        try {
+          const supabase = getSupabase()
+          const { data: existing } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', user.id)
+            .single()
+
+          if (!existing) {
+            // Check if there's already a credentials account with this email
+            const { data: byEmail } = await supabase
+              .from('users')
+              .select('id')
+              .eq('contact_email', user.email)
+              .single()
+
+            if (!byEmail) {
+              // No existing account — create a new users row for this Google user
+              await supabase.from('users').insert({
+                id: user.id,
+                email: user.email,
+                name: user.name ?? '',
+                first_name: user.name?.split(' ')[0] ?? '',
+                last_name: user.name?.split(' ').slice(1).join(' ') ?? '',
+                contact_email: user.email,
+                role: 'high_school',
+                updated_at: new Date().toISOString(),
+              })
+            }
+          }
+        } catch (e) {
+          console.error('Failed to upsert Google user:', e)
+        }
+      }
+      return true
+    },
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id
@@ -123,11 +162,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user || trigger === 'update') {
         try {
           const supabase = getSupabase()
-          const { data } = await supabase
+          // Check by ID first, then fall back to email
+          let data = null
+          const { data: byId } = await supabase
             .from('users')
             .select('role')
             .eq('id', token.sub ?? user?.id)
             .single()
+          data = byId
+
+          if (!data && token.email) {
+            const { data: byEmail } = await supabase
+              .from('users')
+              .select('role')
+              .eq('contact_email', token.email)
+              .single()
+            data = byEmail
+          }
+
           token.role = data?.role ?? null
         } catch {
           token.role = null
