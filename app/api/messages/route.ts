@@ -12,12 +12,12 @@ async function resolveAllIds(userId: string, email?: string | null) {
   if (!realEmail) {
     const { data: user } = await supabase
       .from('users')
-      .select('email, contact_email')
+      .select('email')
       .eq('id', userId)
       .single()
 
     if (user) {
-      realEmail = user.email || (user.contact_email?.startsWith('google:') ? null : user.contact_email)
+      realEmail = user.email || null
     }
   }
 
@@ -45,15 +45,6 @@ async function resolveAllIds(userId: string, email?: string | null) {
 
   if (usersByEmail) {
     for (const u of usersByEmail) ids.add(u.id)
-  }
-
-  const { data: usersByContact } = await supabase
-    .from('users')
-    .select('id')
-    .eq('contact_email', realEmail)
-
-  if (usersByContact) {
-    for (const u of usersByContact) ids.add(u.id)
   }
 
   // Step 4: check tutor_applications for this email
@@ -96,18 +87,11 @@ export async function GET(req: NextRequest) {
     // Step 1: check users.email
     const { data: byEmail, error: e1 } = await supabase
       .from('users')
-      .select('id, email, contact_email, name')
+      .select('id, email, name')
       .eq('email', email ?? '')
     trace.usersByEmail = { data: byEmail, error: e1 }
 
-    // Step 2: check users.contact_email
-    const { data: byContact, error: e2 } = await supabase
-      .from('users')
-      .select('id, email, contact_email, name')
-      .eq('contact_email', email ?? '')
-    trace.usersByContactEmail = { data: byContact, error: e2 }
-
-    // Step 3: check tutor_applications
+    // Step 2: check tutor_applications
     const { data: tutorApp, error: e3 } = await supabase
       .from('tutor_applications')
       .select('user_id, email, application_status')
@@ -121,7 +105,7 @@ export async function GET(req: NextRequest) {
     if (withUser) {
       const { data: partnerUser, error: e4 } = await supabase
         .from('users')
-        .select('id, email, contact_email, name')
+        .select('id, email, name')
         .eq('id', withUser)
       trace.partnerUserById = { data: partnerUser, error: e4 }
 

@@ -21,14 +21,8 @@ export async function POST(req: Request) {
   await supabase.from('users').upsert(
     {
       id: session.user.id,
-      email: session.user.email,
+      email: contactEmail ?? session.user.email,
       name: session.user.name ?? '',
-      image: session.user.image ?? '',
-      email_optin: !!emailOptin,
-      first_name: firstName ?? '',
-      last_name: lastName ?? '',
-      contact_email: contactEmail ?? session.user.email,
-      age: age ? parseInt(age, 10) : null,
       ...(role && { role }),
       updated_at: new Date().toISOString(),
     },

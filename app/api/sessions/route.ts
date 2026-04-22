@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
   try {
     const { data: student } = await supabase
       .from('users')
-      .select('name, contact_email, email')
+      .select('name, email')
       .eq('id', session.user.id)
       .single()
 
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     const tutorName = tutorApp?.name ?? 'your tutor'
-    const studentEmail = student?.contact_email || student?.email
+    const studentEmail = student?.email
     const studentName = student?.name?.split(' ')[0] || 'there'
     const formattedDate = new Date(scheduledDate + 'T00:00:00').toLocaleDateString('en-US', {
       weekday: 'long',

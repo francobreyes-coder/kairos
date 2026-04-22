@@ -49,7 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { data: existing } = await supabase
           .from('users')
           .select('id')
-          .eq('contact_email', email)
+          .eq('email', email)
           .single()
 
         if (existing) return null
@@ -61,12 +61,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id,
           email,
           name: `${firstName} ${lastName}`,
-          first_name: firstName,
-          last_name: lastName,
-          contact_email: email,
-          age: parseInt(age, 10),
-          password_hash: passwordHash,
-          email_optin: emailOptin === 'true',
           role: role || 'high_school',
           updated_at: new Date().toISOString(),
         })
@@ -101,7 +95,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { data: user } = await supabase
           .from('users')
           .select('id, email, name')
-          .eq('contact_email', email)
+          .eq('email', email)
           .eq('password_hash', passwordHash)
           .single()
 
@@ -131,18 +125,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const { data: byEmail } = await supabase
               .from('users')
               .select('id, name')
-              .eq('contact_email', user.email)
+              .eq('email', user.email)
               .single()
 
             // Always create a row for the Google sub ID so messages can resolve names
-            // Use a unique contact_email to avoid constraint conflicts
             await supabase.from('users').insert({
               id: user.id,
-              email: user.email,
+              email: user.email ?? '',
               name: user.name ?? byEmail?.name ?? '',
-              first_name: user.name?.split(' ')[0] ?? '',
-              last_name: user.name?.split(' ').slice(1).join(' ') ?? '',
-              contact_email: byEmail ? `google:${user.id}` : user.email,
               role: 'high_school',
               updated_at: new Date().toISOString(),
             })
@@ -174,7 +164,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const { data: byEmail } = await supabase
               .from('users')
               .select('role')
-              .eq('contact_email', token.email)
+              .eq('email', token.email)
               .single()
             data = byEmail
           }
