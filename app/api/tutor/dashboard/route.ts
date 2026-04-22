@@ -12,23 +12,51 @@ export async function GET() {
   const supabase = getSupabase()
   const userId = session.user.id
 
-  // Verify this user is a tutor with a completed profile
-  const { data: profile } = await supabase
+  // Try by user_id first, then fall back to email-based lookup
+  // (handles cases where user has multiple accounts, e.g. Google + credentials)
+  let { data: profile } = await supabase
     .from('tutor_profiles')
-    .select('user_id, bio, profile_photo, subjects, college, major, availability, services, profile_completed')
+    .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, profile_completed')
     .eq('user_id', userId)
     .eq('profile_completed', true)
     .single()
+
+  let tutorUserId = userId
+
+  // Fallback: look up by email if user_id didn't match
+  if (!profile && session.user.email) {
+    const { data: appByEmail } = await supabase
+      .from('tutor_applications')
+      .select('user_id')
+      .eq('email', session.user.email)
+      .eq('application_status', 'approved')
+      .single()
+
+    if (appByEmail) {
+      const { data: profileByOriginal } = await supabase
+        .from('tutor_profiles')
+        .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, profile_completed')
+        .eq('user_id', appByEmail.user_id)
+        .eq('profile_completed', true)
+        .single()
+
+      if (profileByOriginal) {
+        profile = profileByOriginal
+        tutorUserId = appByEmail.user_id
+      }
+    }
+  }
 
   if (!profile) {
     return NextResponse.json({ error: 'Tutor profile not found' }, { status: 404 })
   }
 
-  // Fetch all sessions for this tutor
+  // Fetch all sessions for this tutor (check both user IDs)
+  const tutorIds = tutorUserId !== userId ? [userId, tutorUserId] : [userId]
   const { data: sessions, error } = await supabase
     .from('sessions')
     .select('*')
-    .eq('tutor_id', userId)
+    .in('tutor_id', tutorIds)
     .order('scheduled_date', { ascending: true })
 
   if (error) {
@@ -95,13 +123,23 @@ export async function GET() {
     .filter((s) => s.scheduled_date >= startOfWeekStr)
     .reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
 
-  // Tutor application name
-  const { data: app } = await supabase
+  // Tutor application name (try user_id, then email fallback)
+  let { data: app } = await supabase
     .from('tutor_applications')
     .select('name')
     .eq('user_id', userId)
     .eq('application_status', 'approved')
     .single()
+
+  if (!app && session.user.email) {
+    const { data: appByEmail } = await supabase
+      .from('tutor_applications')
+      .select('name')
+      .eq('email', session.user.email)
+      .eq('application_status', 'approved')
+      .single()
+    if (appByEmail) app = appByEmail
+  }
 
   return NextResponse.json({
     profile: {

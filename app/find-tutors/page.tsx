@@ -16,6 +16,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  DollarSign,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
 
@@ -30,8 +31,20 @@ interface TutorMatch {
   interests: string[]
   teachingStyle: string
   services: string[]
+  servicePrices: Record<string, number>
   score: number
   reasons: string[]
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  'essays': 'Essay Writing',
+  'sat-act': 'SAT/ACT Prep',
+  'activities': 'Activities',
+}
+
+function getStartingPrice(prices: Record<string, number>): number | null {
+  const values = Object.values(prices).filter((v) => v > 0)
+  return values.length > 0 ? Math.min(...values) : null
 }
 
 export default function FindTutorsPage() {
@@ -251,6 +264,17 @@ export default function FindTutorsPage() {
                             {tutor.major && ` · ${tutor.major}`}
                           </span>
                         </div>
+                        {(() => {
+                          const startPrice = getStartingPrice(tutor.servicePrices ?? {})
+                          return startPrice ? (
+                            <div className="flex items-center gap-1 mt-1.5">
+                              <DollarSign className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                              <span className="text-sm font-semibold text-green-700">
+                                From ${startPrice}/hr
+                              </span>
+                            </div>
+                          ) : null
+                        })()}
                       </div>
                     </div>
 
@@ -310,6 +334,22 @@ export default function FindTutorsPage() {
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <MapPin className="w-3.5 h-3.5" />
                             Teaching style: <span className="text-foreground capitalize">{tutor.teachingStyle.replace(/_/g, ' ')}</span>
+                          </div>
+                        )}
+                        {/* Per-service pricing */}
+                        {tutor.servicePrices && Object.keys(tutor.servicePrices).length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {Object.entries(tutor.servicePrices)
+                              .filter(([, price]) => price > 0)
+                              .map(([svc, price]) => (
+                                <span
+                                  key={svc}
+                                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-700 font-medium"
+                                >
+                                  <DollarSign className="w-3 h-3" />
+                                  {SERVICE_LABELS[svc] ?? svc}: ${price}/hr
+                                </span>
+                              ))}
                           </div>
                         )}
                       </div>

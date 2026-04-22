@@ -19,11 +19,22 @@ import {
   Pencil,
   Save,
   ChevronRight,
+  Briefcase,
+  Info,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
+
+const SERVICE_OPTIONS = [
+  { id: 'essays', label: 'Essay Writing', defaultPrice: 50, description: 'College application essays, personal statements, supplements' },
+  { id: 'sat-act', label: 'SAT/ACT Prep', defaultPrice: 65, description: 'Test prep sessions, practice tests, strategy coaching' },
+  { id: 'activities', label: 'Activities List Building', defaultPrice: 45, description: 'Extracurricular planning, resume building, activity curation' },
+]
+
+const MIN_PRICE = 10
+const MAX_PRICE = 500
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const TIME_SLOTS = [
@@ -69,6 +80,7 @@ interface TutorProfile {
   major: string
   availability: Record<string, string[]>
   services: string[]
+  service_prices: Record<string, number>
 }
 
 /* ------------------------------------------------------------------ */
@@ -309,6 +321,197 @@ function AvailabilityEditor({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Service Pricing Editor                                             */
+/* ------------------------------------------------------------------ */
+
+function ServicePricingEditor({
+  services,
+  servicePrices,
+  onSave,
+  saving,
+}: {
+  services: string[]
+  servicePrices: Record<string, number>
+  onSave: (prices: Record<string, number>) => void
+  saving: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    // Initialize draft from current prices (as strings for input binding)
+    const initial: Record<string, string> = {}
+    for (const svc of services) {
+      const opt = SERVICE_OPTIONS.find((o) => o.id === svc)
+      initial[svc] = String(servicePrices[svc] ?? opt?.defaultPrice ?? 0)
+    }
+    setDraft(initial)
+  }, [services, servicePrices])
+
+  function validate(): boolean {
+    const newErrors: Record<string, string> = {}
+    for (const svc of services) {
+      const val = parseFloat(draft[svc] ?? '')
+      if (isNaN(val)) {
+        newErrors[svc] = 'Enter a valid price'
+      } else if (val < MIN_PRICE) {
+        newErrors[svc] = `Min $${MIN_PRICE}`
+      } else if (val > MAX_PRICE) {
+        newErrors[svc] = `Max $${MAX_PRICE}`
+      }
+    }
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  function handleSave() {
+    if (!validate()) return
+    const prices: Record<string, number> = {}
+    for (const svc of services) {
+      prices[svc] = parseFloat(draft[svc])
+    }
+    onSave(prices)
+    setEditing(false)
+  }
+
+  function setDefault(svc: string) {
+    const opt = SERVICE_OPTIONS.find((o) => o.id === svc)
+    if (opt) {
+      setDraft((prev) => ({ ...prev, [svc]: String(opt.defaultPrice) }))
+    }
+  }
+
+  const activeServices = SERVICE_OPTIONS.filter((o) => services.includes(o.id))
+
+  if (activeServices.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Briefcase className="w-4 h-4 text-accent" />
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Services & Pricing</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          No services configured yet. Add services in your{' '}
+          <Link href="/tutor/profile" className="text-accent hover:text-accent/80 font-medium">
+            tutor profile
+          </Link>.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card">
+      <div className="flex items-center justify-between p-5 pb-0">
+        <div className="flex items-center gap-2">
+          <Briefcase className="w-4 h-4 text-accent" />
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Services & Pricing</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          {editing ? (
+            <>
+              <button
+                onClick={() => { setEditing(false); setErrors({}) }}
+                className="text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-foreground bg-accent hover:bg-accent/90 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                Save Prices
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors"
+            >
+              <Pencil className="w-3 h-3" /> Edit
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="p-5 space-y-4">
+        {activeServices.map((svc) => {
+          const currentPrice = servicePrices[svc.id]
+          const hasPrice = currentPrice !== undefined && currentPrice > 0
+
+          return (
+            <div
+              key={svc.id}
+              className={`rounded-xl border p-4 transition-all ${
+                editing ? 'border-accent/20 bg-accent/5' : 'border-border'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="text-sm font-semibold text-foreground">{svc.label}</h4>
+                    {!editing && hasPrice && (
+                      <span className="text-sm font-bold text-accent">{formatCurrency(currentPrice)}/hr</span>
+                    )}
+                    {!editing && !hasPrice && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">No price set</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{svc.description}</p>
+                </div>
+
+                {editing && (
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm text-muted-foreground">$</span>
+                      <input
+                        type="number"
+                        min={MIN_PRICE}
+                        max={MAX_PRICE}
+                        step="5"
+                        value={draft[svc.id] ?? ''}
+                        onChange={(e) => {
+                          setDraft((prev) => ({ ...prev, [svc.id]: e.target.value }))
+                          setErrors((prev) => { const n = { ...prev }; delete n[svc.id]; return n })
+                        }}
+                        className="w-20 h-9 px-2 rounded-lg bg-card border border-border text-foreground text-sm text-right outline-none focus:ring-2 focus:ring-ring/30 transition"
+                      />
+                      <span className="text-xs text-muted-foreground">/hr</span>
+                    </div>
+                    <button
+                      onClick={() => setDefault(svc.id)}
+                      className="text-[10px] text-accent hover:text-accent/80 font-medium"
+                    >
+                      Use suggested (${svc.defaultPrice})
+                    </button>
+                    {errors[svc.id] && (
+                      <span className="text-[10px] text-red-500 font-medium">{errors[svc.id]}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+
+        {editing && (
+          <div className="flex items-start gap-2 px-1 pt-1">
+            <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Prices are per hour. Suggested prices are based on typical rates for each service.
+              Min ${MIN_PRICE} — Max ${MAX_PRICE} per hour.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main Page                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -323,6 +526,7 @@ export default function TutorDashboard() {
   const [past, setPast] = useState<DashboardSession[]>([])
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [savingAvailability, setSavingAvailability] = useState(false)
+  const [savingPrices, setSavingPrices] = useState(false)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
 
   useEffect(() => {
@@ -388,6 +592,23 @@ export default function TutorDashboard() {
       setError('Failed to save availability')
     } finally {
       setSavingAvailability(false)
+    }
+  }
+
+  async function saveServicePrices(newPrices: Record<string, number>) {
+    setSavingPrices(true)
+    try {
+      const res = await fetch('/api/tutor/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servicePrices: newPrices }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      setProfile((prev) => prev ? { ...prev, service_prices: newPrices } : prev)
+    } catch {
+      setError('Failed to save pricing')
+    } finally {
+      setSavingPrices(false)
     }
   }
 
@@ -596,6 +817,16 @@ export default function TutorDashboard() {
               )}
             </div>
           </div>
+
+          {/* Services & Pricing */}
+          {profile && (
+            <ServicePricingEditor
+              services={profile.services ?? []}
+              servicePrices={profile.service_prices ?? {}}
+              onSave={saveServicePrices}
+              saving={savingPrices}
+            />
+          )}
 
           {/* Availability editor */}
           {profile && (

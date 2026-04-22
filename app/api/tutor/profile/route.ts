@@ -101,23 +101,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No approved application found' }, { status: 403 })
   }
 
+  // Support partial updates: only include fields that are explicitly provided
+  // so dashboard can save just availability or service_prices without wiping other data
   const profileData: Record<string, unknown> = {
     user_id: session.user.id,
-    bio: body.bio ?? '',
-    subjects: body.subjects ?? [],
-    college: body.college ?? '',
-    major: body.major ?? '',
-    interests: body.interests ?? [],
-    teaching_style: body.teachingStyle ?? '',
-    availability: body.availability ?? {},
-    services: body.services ?? [],
-    profile_completed: body.profileCompleted ?? false,
     updated_at: new Date().toISOString(),
   }
 
-  if (body.profilePhoto !== undefined) {
-    profileData.profile_photo = body.profilePhoto
-  }
+  if (body.bio !== undefined) profileData.bio = body.bio
+  if (body.subjects !== undefined) profileData.subjects = body.subjects
+  if (body.college !== undefined) profileData.college = body.college
+  if (body.major !== undefined) profileData.major = body.major
+  if (body.interests !== undefined) profileData.interests = body.interests
+  if (body.teachingStyle !== undefined) profileData.teaching_style = body.teachingStyle
+  if (body.availability !== undefined) profileData.availability = body.availability
+  if (body.services !== undefined) profileData.services = body.services
+  if (body.servicePrices !== undefined) profileData.service_prices = body.servicePrices
+  if (body.profileCompleted !== undefined) profileData.profile_completed = body.profileCompleted
+  if (body.profilePhoto !== undefined) profileData.profile_photo = body.profilePhoto
 
   const { error } = await supabase
     .from('tutor_profiles')
