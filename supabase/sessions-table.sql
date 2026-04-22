@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   time_slot text NOT NULL,            -- e.g. "10:00 AM"
   scheduled_date date NOT NULL,       -- the actual calendar date
   status text NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed')),
+  price numeric(10,2) DEFAULT 0,       -- session price in dollars
+  payment_status text NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'paid', 'refunded')),
   notes text DEFAULT '',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()

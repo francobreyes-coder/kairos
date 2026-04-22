@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu, X, LogOut, UserCircle } from 'lucide-react'
+import { Menu, X, LogOut, UserCircle, LayoutDashboard } from 'lucide-react'
 
 const navLinks = [
   { label: 'How It Works', target: 'how-it-works' },
@@ -50,6 +50,7 @@ export function Header() {
   const router = useRouter()
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
   const [profileHref, setProfileHref] = useState('/tutor/profile')
+  const [isTutor, setIsTutor] = useState(false)
 
   useEffect(() => {
     if (!session?.user?.id) return
@@ -61,8 +62,10 @@ export function Header() {
       .then(({ profile, application, hasApplication }) => {
         if (application || profile || hasApplication) {
           setProfileHref('/tutor/profile')
+          setIsTutor(true)
         } else {
           setProfileHref('/find-tutors')
+          setIsTutor(false)
         }
         if (profile?.profile_photo) {
           setProfilePhoto(`/api/storage?path=${encodeURIComponent(profile.profile_photo)}`)
@@ -135,6 +138,16 @@ export function Header() {
                         <UserCircle className="w-4 h-4" />
                         View Profile
                       </Link>
+                      {isTutor && (
+                        <Link
+                          href="/tutor/dashboard"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <LayoutDashboard className="w-4 h-4" />
+                          Tutor Dashboard
+                        </Link>
+                      )}
                       <Link
                         href="/sessions"
                         onClick={() => setUserMenuOpen(false)}
@@ -202,7 +215,7 @@ export function Header() {
                   <UserAvatar name={session.user?.name} image={profilePhoto || session.user?.image} />
                   <span className="text-sm text-foreground truncate">{session.user?.name}</span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                   <Link
                     href={profileHref}
                     onClick={() => setMobileMenuOpen(false)}
@@ -210,6 +223,15 @@ export function Header() {
                   >
                     View Profile
                   </Link>
+                  {isTutor && (
+                    <Link
+                      href="/tutor/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-sm text-accent hover:text-accent/80 font-medium"
+                    >
+                      Dashboard
+                    </Link>
+                  )}
                   <Link
                     href="/sessions"
                     onClick={() => setMobileMenuOpen(false)}
