@@ -95,6 +95,9 @@ export default function AuthPage() {
   }
 
   const handleGoogleSignin = () => {
+    sessionStorage.removeItem('kairos_email_optin')
+    sessionStorage.removeItem('kairos_signup')
+    sessionStorage.removeItem('kairos_role')
     signIn('google', { callbackUrl: '/home' })
   }
 
@@ -325,26 +328,28 @@ export default function AuthPage() {
           </>
         )}
 
-        {/* Email opt-in */}
-        <label className="flex items-start gap-3 mt-8 cursor-pointer group">
-          <div
-            onClick={() => setEmailOptin(!emailOptin)}
-            className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors flex-shrink-0 mt-0.5 ${
-              emailOptin
-                ? 'bg-accent border-accent'
-                : 'border-border group-hover:border-accent/50'
-            }`}
-          >
-            {emailOptin && (
-              <svg className="w-3 h-3 text-accent-foreground" viewBox="0 0 12 12" fill="none">
-                <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </div>
-          <span className="text-sm text-muted-foreground leading-snug">
-            {"I'd like to receive emails from Kairos about updates, tips, and new features."}
-          </span>
-        </label>
+        {/* Email opt-in (signup only) */}
+        {mode === 'create' && (
+          <label className="flex items-start gap-3 mt-8 cursor-pointer group">
+            <div
+              onClick={() => setEmailOptin(!emailOptin)}
+              className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors flex-shrink-0 mt-0.5 ${
+                emailOptin
+                  ? 'bg-accent border-accent'
+                  : 'border-border group-hover:border-accent/50'
+              }`}
+            >
+              {emailOptin && (
+                <svg className="w-3 h-3 text-accent-foreground" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </div>
+            <span className="text-sm text-muted-foreground leading-snug">
+              {"I'd like to receive emails from Kairos about updates, tips, and new features."}
+            </span>
+          </label>
+        )}
 
         {/* Back link */}
         <div className="mt-8 text-center">

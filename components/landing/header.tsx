@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname, useRouter } from 'next/navigation'
 import { Menu, X, LogOut, UserCircle } from 'lucide-react'
 
 const navLinks = [
@@ -12,8 +13,12 @@ const navLinks = [
   { label: 'Why Kairos', target: 'why-kairos' },
 ]
 
-function scrollTo(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+function scrollTo(id: string, pathname: string, router: ReturnType<typeof useRouter>) {
+  if (pathname === '/home' || pathname === '/') {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  } else {
+    router.push(`/home#${id}`)
+  }
 }
 
 function UserAvatar({ name, image }: { name?: string | null; image?: string | null }) {
@@ -41,6 +46,8 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: session } = useSession()
+  const pathname = usePathname()
+  const router = useRouter()
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
   const [profileHref, setProfileHref] = useState('/tutor/profile')
 
@@ -72,7 +79,7 @@ export function Header() {
       <nav className="mx-auto max-w-6xl px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-2.5">
+          <Link href="/home" className="flex items-center gap-2.5">
             <Image src="/logo.png" alt="Kairos" width={36} height={36} className="rounded-xl flex-shrink-0" />
             <span
               className="text-xl leading-none text-foreground select-none"
@@ -80,14 +87,14 @@ export function Header() {
             >
               kairos
             </span>
-          </div>
+          </Link>
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
               <button
                 key={link.label}
-                onClick={() => scrollTo(link.target)}
+                onClick={() => scrollTo(link.target, pathname, router)}
                 className="text-muted-foreground hover:text-foreground transition-colors text-sm"
               >
                 {link.label}
@@ -98,7 +105,7 @@ export function Header() {
           {/* Desktop right side */}
           <div className="hidden md:flex items-center gap-3">
             <button
-              onClick={() => scrollTo('cta')}
+              onClick={() => scrollTo('cta', pathname, router)}
               className="inline-flex items-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Join Waitlist
@@ -169,14 +176,14 @@ export function Header() {
             {navLinks.map((link) => (
               <button
                 key={link.label}
-                onClick={() => { scrollTo(link.target); setMobileMenuOpen(false) }}
+                onClick={() => { scrollTo(link.target, pathname, router); setMobileMenuOpen(false) }}
                 className="text-left text-muted-foreground hover:text-foreground transition-colors text-sm"
               >
                 {link.label}
               </button>
             ))}
             <button
-              onClick={() => { scrollTo('cta'); setMobileMenuOpen(false) }}
+              onClick={() => { scrollTo('cta', pathname, router); setMobileMenuOpen(false) }}
               className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors mt-2"
             >
               Join Waitlist
