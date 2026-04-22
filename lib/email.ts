@@ -89,6 +89,39 @@ export async function sendApprovalEmail(to: string, name: string, services: stri
   })
 }
 
+export async function sendBookingConfirmationEmail(
+  to: string,
+  name: string,
+  tutorName: string,
+  date: string,
+  timeSlot: string,
+) {
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `Session Booked with ${tutorName}`,
+    html: wrap(`
+      <h1 style="font-size: 22px; color: #1a1a1a; margin: 0 0 16px;">Session Confirmed!</h1>
+      <p style="font-size: 15px; color: #555; line-height: 1.6; margin: 0 0 12px;">
+        Hi ${name}, your tutoring session has been booked!
+      </p>
+      <div style="margin: 16px 0; padding: 16px; background-color: #faf5ff; border-radius: 8px; border-left: 4px solid #7c3aed;">
+        <p style="font-size: 15px; color: #1a1a1a; margin: 0 0 8px;"><strong>Tutor:</strong> ${tutorName}</p>
+        <p style="font-size: 15px; color: #1a1a1a; margin: 0 0 8px;"><strong>Date:</strong> ${date}</p>
+        <p style="font-size: 15px; color: #1a1a1a; margin: 0;"><strong>Time:</strong> ${timeSlot}</p>
+      </div>
+      <p style="font-size: 15px; color: #555; line-height: 1.6; margin: 0 0 24px;">
+        You can view and manage your sessions from your Kairos dashboard.
+      </p>
+      <div style="text-align: center;">
+        <a href="https://kairosguidance.com/sessions" style="display: inline-block; padding: 12px 28px; background-color: #7c3aed; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 500; font-size: 14px;">
+          View My Sessions
+        </a>
+      </div>
+    `),
+  })
+}
+
 export async function sendDenialEmail(to: string, name: string, reason: string) {
   await getResend().emails.send({
     from: FROM,

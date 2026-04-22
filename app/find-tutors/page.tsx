@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
+import BookingModal from '@/components/booking-modal'
 
 interface TutorMatch {
   userId: string
@@ -41,6 +42,7 @@ export default function FindTutorsPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  const [bookingTutor, setBookingTutor] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -329,7 +331,10 @@ export default function FindTutorsPage() {
                           </>
                         )}
                       </button>
-                      <button className="inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors">
+                      <button
+                        onClick={() => setBookingTutor({ id: tutor.userId, name: tutor.name })}
+                        className="inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+                      >
                         Book Now
                       </button>
                     </div>
@@ -340,6 +345,15 @@ export default function FindTutorsPage() {
           )}
         </div>
       </main>
+
+      {bookingTutor && (
+        <BookingModal
+          tutorId={bookingTutor.id}
+          tutorName={bookingTutor.name}
+          onClose={() => setBookingTutor(null)}
+          onBooked={() => setBookingTutor(null)}
+        />
+      )}
     </>
   )
 }
