@@ -81,7 +81,7 @@ export async function POST(req: Request) {
 
   let { data: application } = await supabase
     .from('tutor_applications')
-    .select('id')
+    .select('id, user_id')
     .eq('user_id', session.user.id)
     .eq('application_status', 'approved')
     .single()
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   if (!application && session.user.email) {
     const { data: appByEmail } = await supabase
       .from('tutor_applications')
-      .select('id')
+      .select('id, user_id')
       .eq('email', session.user.email)
       .eq('application_status', 'approved')
       .single()
@@ -101,10 +101,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No approved application found' }, { status: 403 })
   }
 
+  // Determine which user_id the profile actually lives under.
+  // If the user logged in with a different account than they applied with,
+  // their profile row uses the original user_id — update that row, not a new one.
+  let profileUserId = session.user.id
+  if (application.user_id !== session.user.id) {
+    const { data: existingProfile } = await supabase
+      .from('tutor_profiles')
+      .select('user_id')
+      .eq('user_id', application.user_id)
+      .single()
+    if (existingProfile) {
+      profileUserId = application.user_id
+    }
+  }
+
   // Support partial updates: only include fields that are explicitly provided
   // so dashboard can save just availability or service_prices without wiping other data
   const profileData: Record<string, unknown> = {
-    user_id: session.user.id,
+    user_id: profileUserId,
     updated_at: new Date().toISOString(),
   }
 
