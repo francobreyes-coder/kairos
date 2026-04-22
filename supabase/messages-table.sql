@@ -3,10 +3,14 @@ CREATE TABLE IF NOT EXISTS messages (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   sender_id text NOT NULL,
   receiver_id text NOT NULL,
+  sender_name text NOT NULL DEFAULT '',
   session_id uuid REFERENCES sessions(id),
   content text NOT NULL,
   created_at timestamptz DEFAULT now()
 );
+
+-- Add sender_name to existing tables (idempotent)
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_name text NOT NULL DEFAULT '';
 
 -- Index for fast lookups of conversations between two users
 CREATE INDEX IF NOT EXISTS idx_messages_participants

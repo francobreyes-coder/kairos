@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useState, useRef } from 'react'
+import { Suspense, useEffect, useState, useRef, useCallback } from 'react'
 import { Header } from '@/components/landing/header'
 import {
   MessageSquare,
@@ -68,6 +68,7 @@ function MessagesContent() {
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [messages, setMessages] = useState<Message[]>([])
+  const [myIds, setMyIds] = useState<string[]>([])
   const [activePartner, setActivePartner] = useState<{ id: string; name: string } | null>(
     initialWith && initialName ? { id: initialWith, name: initialName } : null
   )
@@ -87,7 +88,10 @@ function MessagesContent() {
     if (status !== 'authenticated') return
     fetch('/api/messages')
       .then((r) => r.json())
-      .then((data) => setConversations(data.conversations ?? []))
+      .then((data) => {
+        setConversations(data.conversations ?? [])
+        if (data.myIds) setMyIds(data.myIds)
+      })
       .catch(() => setError('Failed to load conversations'))
       .finally(() => setLoadingConvos(false))
   }, [status])
@@ -99,7 +103,10 @@ function MessagesContent() {
     setError(null)
     fetch(`/api/messages?with=${activePartner.id}`)
       .then((r) => r.json())
-      .then((data) => setMessages(data.messages ?? []))
+      .then((data) => {
+        setMessages(data.messages ?? [])
+        if (data.myIds) setMyIds(data.myIds)
+      })
       .catch(() => setError('Failed to load messages'))
       .finally(() => setLoadingMessages(false))
   }, [activePartner?.id])
@@ -108,6 +115,14 @@ function MessagesContent() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const isMine = useCallback(
+    (senderId: string) => {
+      if (myIds.length > 0) return myIds.includes(senderId)
+      return senderId === session?.user?.id
+    },
+    [myIds, session?.user?.id]
+  )
 
   async function handleSend() {
     if (!draft.trim() || !activePartner || sending) return
@@ -310,21 +325,21 @@ function MessagesContent() {
                               </span>
                             </div>
                             {group.messages.map((msg) => {
-                              const isMine = msg.sender_id === session?.user?.id
+                              const mine = isMine(msg.sender_id)
                               return (
                                 <div
                                   key={msg.id}
-                                  className={`flex mb-1.5 ${isMine ? 'justify-end' : 'justify-start'}`}
+                                  className={`flex mb-1.5 ${mine ? 'justify-end' : 'justify-start'}`}
                                 >
                                   <div
                                     className={`max-w-[75%] px-3.5 py-2 rounded-2xl ${
-                                      isMine
+                                      mine
                                         ? 'bg-accent text-accent-foreground rounded-br-md'
                                         : 'bg-muted text-foreground rounded-bl-md'
                                     }`}
                                   >
                                     <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                                    <p className={`text-[10px] mt-1 ${isMine ? 'text-accent-foreground/60' : 'text-muted-foreground'}`}>
+                                    <p className={`text-[10px] mt-1 ${mine ? 'text-accent-foreground/60' : 'text-muted-foreground'}`}>
                                       {formatMessageTime(msg.created_at)}
                                     </p>
                                   </div>

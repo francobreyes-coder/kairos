@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   const withUser = req.nextUrl.searchParams.get('with')
 
   if (withUser) {
-    // Fetch messages between current user (any of their IDs) and specified user
+    // Also resolve the partner's IDs (they might have multiple auth accounts too)
     const orClauses = idArray.flatMap((uid) => [
       `and(sender_id.eq.${uid},receiver_id.eq.${withUser})`,
       `and(sender_id.eq.${withUser},receiver_id.eq.${uid})`,
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
     }
 
-    return NextResponse.json({ messages: messages ?? [] })
+    return NextResponse.json({ messages: messages ?? [], myIds: idArray })
   }
 
   // Fetch conversation list — all unique users this user has messaged with
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
 
   const { data: received, error: recvErr } = await supabase
     .from('messages')
-    .select('sender_id, content, created_at')
+    .select('sender_id, sender_name, content, created_at')
     .in('receiver_id', idArray)
     .order('created_at', { ascending: false })
 
@@ -82,9 +82,10 @@ export async function GET(req: NextRequest) {
 
   // Build a map of conversations: other user ID -> latest message
   const convMap = new Map<string, { content: string; created_at: string; is_sender: boolean }>()
+  // Track sender names from messages themselves (reliable fallback)
+  const senderNameMap = new Map<string, string>()
 
   for (const m of sent ?? []) {
-    // Skip if the receiver is also one of our IDs (self-message across accounts)
     if (userIds.has(m.receiver_id)) continue
     const existing = convMap.get(m.receiver_id)
     if (!existing || m.created_at > existing.created_at) {
@@ -97,6 +98,10 @@ export async function GET(req: NextRequest) {
     const existing = convMap.get(m.sender_id)
     if (!existing || m.created_at > existing.created_at) {
       convMap.set(m.sender_id, { content: m.content, created_at: m.created_at, is_sender: false })
+    }
+    // Save the sender_name from the message itself
+    if (m.sender_name) {
+      senderNameMap.set(m.sender_id, m.sender_name)
     }
   }
 
@@ -117,7 +122,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Check tutor_applications by user_id (may have a better display name)
+    // Check tutor_applications by user_id
     const { data: apps } = await supabase
       .from('tutor_applications')
       .select('user_id, name')
@@ -130,7 +135,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Check students table for student names
+    // Check students table
     const { data: students } = await supabase
       .from('students')
       .select('user_id, name')
@@ -140,6 +145,11 @@ export async function GET(req: NextRequest) {
       for (const s of students) {
         if (s.name && !nameMap.has(s.user_id)) nameMap.set(s.user_id, s.name)
       }
+    }
+
+    // Use sender_name from messages as final fallback
+    for (const [id, name] of senderNameMap) {
+      if (!nameMap.has(id)) nameMap.set(id, name)
     }
   }
 
@@ -156,7 +166,7 @@ export async function GET(req: NextRequest) {
     })
     .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at))
 
-  return NextResponse.json({ conversations })
+  return NextResponse.json({ conversations, myIds: idArray })
 }
 
 // POST /api/messages — send a message
@@ -173,19 +183,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing receiver or content' }, { status: 400 })
   }
 
-  // Resolve sender's canonical ID (use tutor application ID if they have one, otherwise session ID)
   const userIds = await resolveUserIds(session.user.id, session.user.email)
 
   if (userIds.has(receiverId)) {
     return NextResponse.json({ error: 'Cannot message yourself' }, { status: 400 })
   }
 
-  // Use the session user ID as sender (consistent with what the client sees)
   const supabase = getSupabase()
+
+  // Resolve the sender's display name
+  let senderName = session.user.name ?? ''
+  if (!senderName && session.user.email) {
+    // Try to get name from users table
+    const { data: u } = await supabase
+      .from('users')
+      .select('name')
+      .eq('contact_email', session.user.email)
+      .single()
+    if (u?.name) senderName = u.name
+  }
 
   const insertData: Record<string, unknown> = {
     sender_id: session.user.id,
     receiver_id: receiverId,
+    sender_name: senderName,
     content: content.trim(),
   }
 

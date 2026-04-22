@@ -130,23 +130,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Check if there's already a credentials account with this email
             const { data: byEmail } = await supabase
               .from('users')
-              .select('id')
+              .select('id, name')
               .eq('contact_email', user.email)
               .single()
 
-            if (!byEmail) {
-              // No existing account — create a new users row for this Google user
-              await supabase.from('users').insert({
-                id: user.id,
-                email: user.email,
-                name: user.name ?? '',
-                first_name: user.name?.split(' ')[0] ?? '',
-                last_name: user.name?.split(' ').slice(1).join(' ') ?? '',
-                contact_email: user.email,
-                role: 'high_school',
-                updated_at: new Date().toISOString(),
-              })
-            }
+            // Always create a row for the Google sub ID so messages can resolve names
+            // Use a unique contact_email to avoid constraint conflicts
+            await supabase.from('users').insert({
+              id: user.id,
+              email: user.email,
+              name: user.name ?? byEmail?.name ?? '',
+              first_name: user.name?.split(' ')[0] ?? '',
+              last_name: user.name?.split(' ').slice(1).join(' ') ?? '',
+              contact_email: byEmail ? `google:${user.id}` : user.email,
+              role: 'high_school',
+              updated_at: new Date().toISOString(),
+            })
           }
         } catch (e) {
           console.error('Failed to upsert Google user:', e)
