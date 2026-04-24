@@ -22,6 +22,7 @@ import {
   Briefcase,
   Info,
   Video,
+  ClipboardList,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -734,6 +735,13 @@ export default function TutorDashboard() {
               >
                 <Pencil className="w-3.5 h-3.5" />
                 Edit Profile
+              </Link>
+              <Link
+                href="/tutor/tests"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-accent-foreground bg-accent hover:bg-accent/90 transition-colors"
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                My Tests
               </Link>
               <Link
                 href="/find-tutors"
