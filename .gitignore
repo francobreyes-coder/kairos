@@ -36,3 +36,11 @@ dev-out*.txt
 dev-err*.txt
 
 .vercel
+
+# question bank data artifacts (extracted locally, not checked in)
+/questions.json
+/answer-keys.json
+/*.json.bak
+
+# supabase CLI temp
+/supabase/.temp/
