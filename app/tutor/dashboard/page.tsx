@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Briefcase,
   Info,
+  Video,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -33,7 +34,7 @@ const SERVICE_OPTIONS = [
   { id: 'activities', label: 'Activities List Building', defaultPrice: 45, description: 'Extracurricular planning, resume building, activity curation' },
 ]
 
-const MIN_PRICE = 10
+const MIN_PRICE = 0
 const MAX_PRICE = 500
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -98,6 +99,21 @@ function formatDate(dateStr: string): string {
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+}
+
+function isWithinSessionWindow(scheduledDate: string, timeSlot: string): boolean {
+  const match = timeSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!match) return false
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2], 10)
+  const period = match[3].toUpperCase()
+  if (period === 'PM' && hours !== 12) hours += 12
+  if (period === 'AM' && hours === 12) hours = 0
+  const sessionStart = new Date(`${scheduledDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
+  const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000)
+  const now = new Date()
+  const earlyJoin = new Date(sessionStart.getTime() - 10 * 60 * 1000)
+  return now >= earlyJoin && now <= sessionEnd
 }
 
 function getNextSessionCountdown(sessions: DashboardSession[]): string | null {
@@ -196,6 +212,15 @@ function SessionRow({
           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">
             <XCircle className="w-3 h-3" /> Cancelled
           </span>
+        )}
+        {!isPast && s.status === 'confirmed' && s.scheduled_date >= today && isWithinSessionWindow(s.scheduled_date, s.time_slot) && (
+          <a
+            href={`/session/${s.id}`}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-accent hover:bg-accent/90 px-2.5 py-1 rounded-lg transition-colors"
+          >
+            <Video className="w-3 h-3" />
+            Join
+          </a>
         )}
         {!isPast && s.status === 'confirmed' && s.scheduled_date >= today && onCancel && (
           <button
