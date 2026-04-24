@@ -13,6 +13,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  Video,
 } from 'lucide-react'
 
 interface Session {
@@ -89,6 +90,24 @@ export default function SessionsPage() {
   )
 
   const displayed = tab === 'upcoming' ? upcoming : past
+
+  function isWithinSessionWindow(scheduledDate: string, timeSlot: string): boolean {
+    const match = timeSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+    if (!match) return false
+
+    let hours = parseInt(match[1], 10)
+    const minutes = parseInt(match[2], 10)
+    const period = match[3].toUpperCase()
+    if (period === 'PM' && hours !== 12) hours += 12
+    if (period === 'AM' && hours === 12) hours = 0
+
+    const sessionStart = new Date(`${scheduledDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
+    const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000)
+    const now = new Date()
+    const earlyJoin = new Date(sessionStart.getTime() - 10 * 60 * 1000)
+
+    return now >= earlyJoin && now <= sessionEnd
+  }
 
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00')
@@ -264,6 +283,15 @@ export default function SessionsPage() {
 
                     <div className="flex flex-col items-end gap-2">
                       {statusBadge(s.status)}
+                      {s.status === 'confirmed' && s.scheduled_date >= today && isWithinSessionWindow(s.scheduled_date, s.time_slot) && (
+                        <button
+                          onClick={() => router.push(`/session/${s.id}`)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"
+                        >
+                          <Video className="w-3.5 h-3.5" />
+                          Join Call
+                        </button>
+                      )}
                       {s.status === 'confirmed' && s.scheduled_date >= today && (
                         <button
                           onClick={() => cancelSession(s.id)}

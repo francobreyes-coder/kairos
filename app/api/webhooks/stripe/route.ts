@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { getSupabase } from '@/lib/supabase'
 import { getStripe } from '@/lib/stripe'
 import { sendBookingConfirmationEmail } from '@/lib/email'
+import { createVideoRoom } from '@/lib/daily'
 
 // Disable body parsing — Stripe needs the raw body for signature verification
 export const dynamic = 'force-dynamic'
@@ -64,6 +65,21 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error('Failed to create session after payment:', error)
       return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })
+    }
+
+    // Create a Daily.co video room for this session
+    try {
+      const { roomName, roomUrl } = await createVideoRoom(
+        newSession.id,
+        meta.scheduled_date,
+        meta.time_slot,
+      )
+      await supabase
+        .from('sessions')
+        .update({ video_room_name: roomName, video_room_url: roomUrl })
+        .eq('id', newSession.id)
+    } catch (e) {
+      console.error('Failed to create video room:', e)
     }
 
     // Send confirmation email

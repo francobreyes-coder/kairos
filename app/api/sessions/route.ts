@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { sendBookingConfirmationEmail } from '@/lib/email'
+import { createVideoRoom } from '@/lib/daily'
 
 // GET /api/sessions — fetch user's sessions (as student or tutor)
 export async function GET() {
@@ -152,6 +153,18 @@ export async function POST(req: NextRequest) {
   if (error) {
     console.error('Failed to create session:', error)
     return NextResponse.json({ error: 'Failed to book session' }, { status: 500 })
+  }
+
+  // Create a Daily.co video room for this session
+  try {
+    const { roomName, roomUrl } = await createVideoRoom(newSession.id, scheduledDate, timeSlot)
+    await supabase
+      .from('sessions')
+      .update({ video_room_name: roomName, video_room_url: roomUrl })
+      .eq('id', newSession.id)
+  } catch (e) {
+    console.error('Failed to create video room:', e)
+    // Non-blocking: session is still valid without video
   }
 
   // Send confirmation email to student
