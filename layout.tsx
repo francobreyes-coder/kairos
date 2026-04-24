@@ -1,18 +1,23 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Montserrat } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
-const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
+const montserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat' })
+const shrikhand = localFont({
+  src: '../public/fonts/Shrikhand-Regular.ttf',
+  variable: '--font-shrikhand',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: 'Kairos | Learn from Students Who Just Did It',
+  title: 'kairos — the right guidance, at the right time.',
   description:
     'Kairos connects high school students with current undergraduates at top universities. Get personalized help with essays, test prep, and activities—from those who know what it takes.',
   metadataBase: new URL('https://kairos.app'),
   openGraph: {
-    title: 'Kairos | Learn from Students Who Just Did It',
+    title: 'kairos — the right guidance, at the right time.',
     description:
       'Kairos connects high school students with current undergraduates at top universities.',
     type: 'website',
@@ -28,8 +33,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} bg-background`}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={`${montserrat.variable} ${shrikhand.variable}`}>
+      <body className="font-sans antialiased bg-surface text-ink">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

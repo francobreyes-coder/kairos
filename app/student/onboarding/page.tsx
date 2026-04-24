@@ -258,6 +258,15 @@ export default function StudentOnboardingPage() {
     setStep((s) => Math.min(s + 1, STEPS.length - 1))
   }
 
+  function skipStep() {
+    saveProgress()
+    if (step < STEPS.length - 1) {
+      setStep((s) => s + 1)
+    } else {
+      handleComplete()
+    }
+  }
+
   function prevStep() {
     setStep((s) => Math.max(s - 1, 0))
   }
@@ -565,33 +574,43 @@ export default function StudentOnboardingPage() {
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
 
-            {step < STEPS.length - 1 ? (
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={nextStep}
-                disabled={!canAdvance()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium transition-colors hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={skipStep}
+                className="inline-flex items-center gap-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-secondary"
               >
-                Next <ArrowRight className="w-4 h-4" />
+                Skip
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleComplete}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium transition-colors hover:bg-accent/90 disabled:opacity-40"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Saving...
-                  </>
-                ) : (
-                  <>
-                    Find My Tutors <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            )}
+
+              {step < STEPS.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={!canAdvance()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium transition-colors hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleComplete}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium transition-colors hover:bg-accent/90 disabled:opacity-40"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      Find My Tutors <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
         </div>

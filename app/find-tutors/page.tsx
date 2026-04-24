@@ -2,22 +2,18 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Header } from '@/components/landing/header'
 import {
   Search,
-  GraduationCap,
-  Sparkles,
-  BookOpen,
-  Heart,
   MapPin,
-  Star,
+  Heart,
+  Clock,
   Loader2,
   X,
-  ChevronDown,
-  ChevronUp,
+  Star,
   DollarSign,
-  MessageSquare,
+  Sparkles,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
 
@@ -38,15 +34,63 @@ interface TutorMatch {
 }
 
 const SERVICE_LABELS: Record<string, string> = {
-  'essays': 'Essay Writing',
+  essays: 'Essay Writing',
   'sat-act': 'SAT/ACT Prep',
-  'activities': 'Activities',
+  activities: 'Activities',
 }
+
+const TEACHING_STYLE_LABELS: Record<string, string> = {
+  structured: 'Structured & Organized',
+  collaborative: 'Collaborative',
+  socratic: 'Socratic / Question-Based',
+  flexible: 'Flexible & Adaptive',
+}
+
+const AVATAR_COLORS = [
+  '#6C52E0',
+  '#7A62EA',
+  '#9B86F0',
+  '#B47AE8',
+  '#8177C9',
+  '#7A3AE8',
+  '#BDB0F5',
+  '#5B24CC',
+]
 
 function getStartingPrice(prices: Record<string, number>): number | null {
   const values = Object.values(prices).filter((v) => v > 0)
   return values.length > 0 ? Math.min(...values) : null
 }
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+function getAvatarColor(userId: string): string {
+  let hash = 0
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
+// Build filter chips from actual tutor data
+function buildFilterChips(tutors: TutorMatch[]): string[] {
+  const serviceSet = new Set<string>()
+  for (const t of tutors) {
+    for (const s of t.services) {
+      if (SERVICE_LABELS[s]) serviceSet.add(SERVICE_LABELS[s])
+    }
+  }
+  return Array.from(serviceSet)
+}
+
+type SortMode = 'best' | 'price-low' | 'price-high'
 
 export default function FindTutorsPage() {
   const { data: session, status } = useSession()
@@ -55,15 +99,20 @@ export default function FindTutorsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
-  const [bookingTutor, setBookingTutor] = useState<{ id: string; name: string; services: string[]; servicePrices: Record<string, number> } | null>(null)
+  const [activeFilter, setActiveFilter] = useState('All')
+  const [sortMode, setSortMode] = useState<SortMode>('best')
+  const [bookingTutor, setBookingTutor] = useState<{
+    id: string
+    name: string
+    services: string[]
+    servicePrices: Record<string, number>
+  } | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
   }, [status, router])
 
   useEffect(() => {
-    if (status !== 'authenticated') return
     fetch('/api/match-tutors')
       .then((r) => {
         if (!r.ok) throw new Error('Failed to load tutors')
@@ -74,52 +123,76 @@ export default function FindTutorsPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [status])
+  }, [])
+
+  const filterChips = useMemo(() => buildFilterChips(matches), [matches])
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return matches
-    const q = searchQuery.toLowerCase()
-    return matches.filter((t) => {
-      const searchable = [
-        t.name,
-        t.college,
-        t.major,
-        ...t.subjects,
-        ...t.interests,
-        t.teachingStyle,
-        ...t.services,
-      ]
-        .join(' ')
-        .toLowerCase()
-      return searchable.includes(q)
-    })
-  }, [matches, searchQuery])
+    let result = matches
 
-  function toggleExpanded(userId: string) {
-    setExpandedCards((prev) => {
-      const next = new Set(prev)
-      if (next.has(userId)) next.delete(userId)
-      else next.add(userId)
-      return next
-    })
+    // Filter by active chip
+    if (activeFilter !== 'All') {
+      result = result.filter((t) =>
+        t.services.some((s) => SERVICE_LABELS[s] === activeFilter)
+      )
+    }
+
+    // Filter by search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((t) => {
+        const searchable = [
+          t.name,
+          t.college,
+          t.major,
+          ...t.subjects,
+          ...t.interests,
+          t.teachingStyle,
+          ...t.services.map((s) => SERVICE_LABELS[s] ?? s),
+        ]
+          .join(' ')
+          .toLowerCase()
+        return searchable.includes(q)
+      })
+    }
+
+    // Sort
+    if (sortMode === 'price-low') {
+      result = [...result].sort(
+        (a, b) => (getStartingPrice(a.servicePrices) ?? 999) - (getStartingPrice(b.servicePrices) ?? 999)
+      )
+    } else if (sortMode === 'price-high') {
+      result = [...result].sort(
+        (a, b) => (getStartingPrice(b.servicePrices) ?? 0) - (getStartingPrice(a.servicePrices) ?? 0)
+      )
+    }
+    // 'best' = default API order (by match score)
+
+    return result
+  }, [matches, searchQuery, activeFilter, sortMode])
+
+  function clearFilters() {
+    setActiveFilter('All')
+    setSearchQuery('')
+    setSortMode('best')
   }
 
-  function getScoreLabel(score: number): { text: string; color: string } {
-    if (score >= 60) return { text: 'Great Match', color: 'bg-green-100 text-green-700' }
-    if (score >= 35) return { text: 'Good Match', color: 'bg-blue-100 text-blue-700' }
-    return { text: 'Match', color: 'bg-gray-100 text-gray-600' }
-  }
-
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
       <>
         <Header />
-        <main className="min-h-screen pt-28 pb-24 px-6">
-          <div className="mx-auto max-w-4xl">
-            <div className="flex flex-col items-center justify-center gap-4 py-20">
-              <Loader2 className="w-8 h-8 text-accent animate-spin" />
-              <p className="text-muted-foreground">Finding your best tutor matches...</p>
-            </div>
+        <div className="feed-hero">
+          <div className="feed-hero-k">k</div>
+          <div className="feed-hero-eyebrow">Browse</div>
+          <h1 className="feed-hero-title">Find Tutors</h1>
+          <p className="feed-hero-desc">
+            Connect with undergrads at top universities who&apos;ve done it. Real experience, proven results.
+          </p>
+        </div>
+        <main className="feed-body">
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <Loader2 className="w-8 h-8 text-purple animate-spin" />
+            <p className="text-mute text-sm font-medium">Finding your best tutor matches...</p>
           </div>
         </main>
       </>
@@ -130,18 +203,26 @@ export default function FindTutorsPage() {
     return (
       <>
         <Header />
-        <main className="min-h-screen pt-28 pb-24 px-6">
-          <div className="mx-auto max-w-3xl text-center py-20">
+        <div className="feed-hero">
+          <div className="feed-hero-k">k</div>
+          <div className="feed-hero-eyebrow">Browse</div>
+          <h1 className="feed-hero-title">Find Tutors</h1>
+          <p className="feed-hero-desc">
+            Connect with undergrads at top universities who&apos;ve done it. Real experience, proven results.
+          </p>
+        </div>
+        <main className="feed-body">
+          <div className="text-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-6">
               <X className="w-8 h-8 text-red-500" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-3">Something went wrong</h1>
-            <p className="text-muted-foreground mb-6">{error}</p>
+            <h2 className="text-xl font-bold text-ink mb-2">Something went wrong</h2>
+            <p className="text-mute mb-6">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+              className="btn-book-inline"
             >
-              Try Again
+              TRY AGAIN
             </button>
           </div>
         </main>
@@ -152,249 +233,209 @@ export default function FindTutorsPage() {
   return (
     <>
       <Header />
-      <main className="min-h-screen pt-28 pb-24 px-6">
-        <div className="mx-auto max-w-4xl">
-          {/* Page Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-foreground mb-2">Find Your Tutor</h1>
-            <p className="text-muted-foreground">
-              Tutors ranked by how well they match your profile.{' '}
-              {matches.length > 0 && (
-                <span className="text-foreground font-medium">{matches.length} tutors available</span>
-              )}
-            </p>
-          </div>
 
-          {/* Search Bar */}
-          <div className="relative mb-8">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+      {/* HERO BANNER */}
+      <div className="feed-hero">
+        <div className="feed-hero-k">k</div>
+        <div className="feed-hero-eyebrow">Browse</div>
+        <h1 className="feed-hero-title">Find Tutors</h1>
+        <p className="feed-hero-desc">
+          Connect with undergrads at top universities who&apos;ve done it. Real experience, proven results.
+        </p>
+      </div>
+
+      {/* SEARCH + FILTERS BAR */}
+      <div className="filter-bar">
+        <div className="filter-top">
+          <div className="search-wrap">
+            <Search className="w-[18px] h-[18px] text-purple-soft flex-shrink-0" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, college, subject, interest..."
-              className="w-full pl-12 pr-10 py-3.5 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all text-sm"
+              placeholder="Search by name, college, subject..."
+              className="flex-1 border-none outline-none bg-transparent font-sans text-sm text-ink placeholder:text-mute"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="text-mute hover:text-ink transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
-
-          {/* Results */}
-          {filtered.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-6">
-                <Search className="w-8 h-8 text-accent" />
-              </div>
-              {matches.length === 0 ? (
-                <>
-                  <h2 className="text-xl font-bold text-foreground mb-2">No tutors yet</h2>
-                  <p className="text-muted-foreground max-w-md mx-auto">
-                    {"We're onboarding tutors right now. Check back soon — we'll have matches for you!"}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h2 className="text-xl font-bold text-foreground mb-2">No results</h2>
-                  <p className="text-muted-foreground">
-                    No tutors match &ldquo;{searchQuery}&rdquo;. Try a different search.
-                  </p>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filtered.map((tutor, idx) => {
-                const scoreLabel = getScoreLabel(tutor.score)
-                const isExpanded = expandedCards.has(tutor.userId)
-                const photoUrl = tutor.profilePhoto
-                  ? `/api/storage?path=${encodeURIComponent(tutor.profilePhoto)}`
-                  : null
-
-                return (
-                  <div
-                    key={tutor.userId}
-                    className="rounded-2xl border border-border bg-card p-5 sm:p-6 hover:border-accent/30 transition-all"
-                  >
-                    {/* Top row: rank + avatar + name/college + score badge */}
-                    <div className="flex items-start gap-4">
-                      {/* Rank number */}
-                      <div className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-accent/10 text-accent text-sm font-bold flex-shrink-0 mt-0.5">
-                        {idx + 1}
-                      </div>
-
-                      {/* Avatar */}
-                      <div className="flex-shrink-0">
-                        {photoUrl ? (
-                          <img
-                            src={photoUrl}
-                            alt=""
-                            className="w-14 h-14 rounded-xl object-cover"
-                          />
-                        ) : (
-                          <div className="w-14 h-14 rounded-xl bg-accent/10 flex items-center justify-center">
-                            <span className="text-lg font-bold text-accent">
-                              {tutor.name
-                                .split(' ')
-                                .map((w) => w[0])
-                                .join('')
-                                .slice(0, 2)
-                                .toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Name + college + major */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-lg font-semibold text-foreground">{tutor.name}</h3>
-                          <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${scoreLabel.color}`}>
-                            {scoreLabel.text}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
-                          <GraduationCap className="w-3.5 h-3.5 flex-shrink-0" />
-                          <span className="truncate">
-                            {tutor.college}
-                            {tutor.major && ` · ${tutor.major}`}
-                          </span>
-                        </div>
-                        {(() => {
-                          const startPrice = getStartingPrice(tutor.servicePrices ?? {})
-                          return startPrice ? (
-                            <div className="flex items-center gap-1 mt-1.5">
-                              <DollarSign className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                              <span className="text-sm font-semibold text-green-700">
-                                From ${startPrice}/hr
-                              </span>
-                            </div>
-                          ) : null
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* "Why this tutor?" reasons */}
-                    <div className="mt-4 p-3.5 rounded-xl bg-accent/5 border border-accent/10">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Sparkles className="w-3.5 h-3.5 text-accent" />
-                        <span className="text-xs font-semibold text-accent uppercase tracking-wide">
-                          Why this tutor?
-                        </span>
-                      </div>
-                      <ul className="space-y-1">
-                        {tutor.reasons.map((reason, i) => (
-                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                            <Star className="w-3 h-3 text-accent mt-1 flex-shrink-0" />
-                            {reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Tags: subjects + interests */}
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {tutor.subjects.slice(0, isExpanded ? undefined : 4).map((s) => (
-                        <span
-                          key={s}
-                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700"
-                        >
-                          <BookOpen className="w-3 h-3" />
-                          {s}
-                        </span>
-                      ))}
-                      {tutor.interests.slice(0, isExpanded ? undefined : 3).map((i) => (
-                        <span
-                          key={i}
-                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-pink-50 text-pink-700"
-                        >
-                          <Heart className="w-3 h-3" />
-                          {i}
-                        </span>
-                      ))}
-                      {!isExpanded &&
-                        tutor.subjects.length + tutor.interests.length > 7 && (
-                          <span className="text-xs text-muted-foreground py-1">
-                            +{tutor.subjects.length + tutor.interests.length - 7} more
-                          </span>
-                        )}
-                    </div>
-
-                    {/* Expanded details */}
-                    {isExpanded && (
-                      <div className="mt-4 pt-4 border-t border-border space-y-3">
-                        {tutor.bio && (
-                          <p className="text-sm text-muted-foreground leading-relaxed">{tutor.bio}</p>
-                        )}
-                        {tutor.teachingStyle && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <MapPin className="w-3.5 h-3.5" />
-                            Teaching style: <span className="text-foreground capitalize">{tutor.teachingStyle.replace(/_/g, ' ')}</span>
-                          </div>
-                        )}
-                        {/* Per-service pricing */}
-                        {tutor.servicePrices && Object.keys(tutor.servicePrices).length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {Object.entries(tutor.servicePrices)
-                              .filter(([, price]) => price > 0)
-                              .map(([svc, price]) => (
-                                <span
-                                  key={svc}
-                                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-700 font-medium"
-                                >
-                                  <DollarSign className="w-3 h-3" />
-                                  {SERVICE_LABELS[svc] ?? svc}: ${price}/hr
-                                </span>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Bottom row: expand toggle + Book button */}
-                    <div className="mt-4 flex items-center justify-between">
-                      <button
-                        onClick={() => toggleExpanded(tutor.userId)}
-                        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {isExpanded ? (
-                          <>
-                            <ChevronUp className="w-4 h-4" /> Less
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="w-4 h-4" /> More details
-                          </>
-                        )}
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => router.push(`/messages?with=${tutor.userId}&name=${encodeURIComponent(tutor.name)}`)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-accent/30 transition-colors"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          Message
-                        </button>
-                        <button
-                          onClick={() => setBookingTutor({ id: tutor.userId, name: tutor.name, services: tutor.services, servicePrices: tutor.servicePrices })}
-                          className="inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
-                        >
-                          Book Now
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="sort-select"
+          >
+            <option value="best">Best match</option>
+            <option value="price-low">Price: low to high</option>
+            <option value="price-high">Price: high to low</option>
+          </select>
+        </div>
+        <div className="filter-chips">
+          <span className="filter-label">Filter:</span>
+          <button
+            className={`chip ${activeFilter === 'All' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('All')}
+          >
+            All
+          </button>
+          {filterChips.map((label) => (
+            <button
+              key={label}
+              className={`chip ${activeFilter === label ? 'active' : ''}`}
+              onClick={() => setActiveFilter(label)}
+            >
+              {label}
+            </button>
+          ))}
+          {(activeFilter !== 'All' || searchQuery || sortMode !== 'best') && (
+            <button className="chip-clear" onClick={clearFilters}>
+              Clear all
+            </button>
           )}
         </div>
-      </main>
+      </div>
+
+      {/* FEED BODY */}
+      <div className="feed-body">
+        <div className="feed-meta">
+          <div className="feed-count">
+            <span className="text-ink font-bold">{filtered.length}</span> tutors
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="empty-state">
+            <Search className="w-12 h-12 text-mute opacity-40 mx-auto mb-4" />
+            {matches.length === 0 ? (
+              <p className="text-mute text-[15px]">
+                We&apos;re onboarding tutors right now. Check back soon!
+              </p>
+            ) : (
+              <p className="text-mute text-[15px]">
+                No tutors match your search. Try different filters.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="tutor-grid">
+            {filtered.map((tutor, idx) => {
+              const photoUrl = tutor.profilePhoto
+                ? `/api/storage?path=${encodeURIComponent(tutor.profilePhoto)}`
+                : null
+              const startPrice = getStartingPrice(tutor.servicePrices ?? {})
+              const isFeatured = idx === 0 && activeFilter === 'All' && !searchQuery && sortMode === 'best'
+
+              // Build tags: first service as primary, rest + subjects as secondary
+              const serviceTags = tutor.services.map((s) => SERVICE_LABELS[s] ?? s)
+              const subjectTags = tutor.subjects.slice(0, 3)
+
+              return (
+                <div
+                  key={tutor.userId}
+                  className={`tcard ${isFeatured ? 'featured' : ''}`}
+                  style={{ animationDelay: `${idx * 0.05}s` }}
+                >
+                  {isFeatured && (
+                    <div className="featured-badge">
+                      <Sparkles className="w-3 h-3" /> Top Match
+                    </div>
+                  )}
+
+                  {/* Header: avatar + info + price */}
+                  <div className="tcard-header">
+                    {photoUrl ? (
+                      <img
+                        src={photoUrl}
+                        alt=""
+                        className="tcard-avatar-img"
+                      />
+                    ) : (
+                      <div
+                        className="tcard-avatar"
+                        style={{ background: getAvatarColor(tutor.userId) }}
+                      >
+                        {getInitials(tutor.name)}
+                      </div>
+                    )}
+                    <div className="tcard-info">
+                      <div className="tcard-name">{tutor.name}</div>
+                      <div className="tcard-school">
+                        {tutor.college}
+                        {tutor.major && ` · ${tutor.major}`}
+                      </div>
+                      {tutor.score > 0 && (
+                        <div className="tcard-rating">
+                          <Star className="w-[13px] h-[13px] text-amber fill-amber" />
+                          <span className="tcard-score">
+                            {tutor.score >= 60 ? 'Great' : tutor.score >= 35 ? 'Good' : 'Match'}
+                          </span>
+                          <span className="tcard-match-pct">({tutor.score}%)</span>
+                        </div>
+                      )}
+                    </div>
+                    {startPrice && (
+                      <div className="tcard-price">
+                        ${startPrice}
+                        <span>/hr</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tags */}
+                  <div className="tcard-tags">
+                    {serviceTags.map((tag, i) => (
+                      <span key={tag} className={`tcard-tag ${i > 0 ? 'secondary' : ''}`}>
+                        {tag}
+                      </span>
+                    ))}
+                    {subjectTags.map((tag) => (
+                      <span key={tag} className="tcard-tag secondary">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Meta */}
+                  <div className="tcard-meta">
+                    {tutor.teachingStyle && (
+                      <div className="tcard-meta-row">
+                        <Clock className="tcard-meta-icon w-[14px] h-[14px]" />
+                        {TEACHING_STYLE_LABELS[tutor.teachingStyle] ?? tutor.teachingStyle}
+                      </div>
+                    )}
+                    {tutor.interests.length > 0 && (
+                      <div className="tcard-meta-row">
+                        <Heart className="tcard-meta-icon w-[14px] h-[14px]" />
+                        {tutor.interests.slice(0, 3).join(', ')}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Book Now */}
+                  <button
+                    className="btn-book"
+                    onClick={() =>
+                      setBookingTutor({
+                        id: tutor.userId,
+                        name: tutor.name,
+                        services: tutor.services,
+                        servicePrices: tutor.servicePrices,
+                      })
+                    }
+                  >
+                    BOOK NOW
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {bookingTutor && (
         <BookingModal
@@ -406,6 +447,457 @@ export default function FindTutorsPage() {
           onBooked={() => setBookingTutor(null)}
         />
       )}
+
+      <style jsx>{`
+        /* ── HERO BANNER ── */
+        .feed-hero {
+          background: linear-gradient(135deg, #82AAEE 0%, #B47AE8 52%, #E882CC 100%);
+          padding: 120px 48px 48px;
+          position: relative;
+          overflow: hidden;
+        }
+        .feed-hero::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(ellipse at 80% 50%, rgba(255, 255, 255, 0.18) 0%, transparent 60%);
+          pointer-events: none;
+        }
+        .feed-hero-k {
+          position: absolute;
+          right: 48px;
+          bottom: -16px;
+          font-family: var(--font-shrikhand), 'Shrikhand', serif;
+          font-size: 180px;
+          color: rgba(255, 255, 255, 0.12);
+          line-height: 1;
+          pointer-events: none;
+          user-select: none;
+        }
+        .feed-hero-eyebrow {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: rgba(255, 255, 255, 0.75);
+          margin-bottom: 10px;
+          position: relative;
+        }
+        .feed-hero-title {
+          font-family: var(--font-shrikhand), 'Shrikhand', serif;
+          font-size: clamp(36px, 5vw, 64px);
+          color: white;
+          line-height: 1.05;
+          max-width: 600px;
+          margin-bottom: 14px;
+          position: relative;
+        }
+        .feed-hero-desc {
+          font-size: 16px;
+          color: rgba(255, 255, 255, 0.85);
+          max-width: 480px;
+          line-height: 1.6;
+          position: relative;
+        }
+
+        /* ── SEARCH + FILTERS BAR ── */
+        .filter-bar {
+          position: sticky;
+          top: 64px;
+          z-index: 90;
+          background: rgba(247, 245, 240, 0.95);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-bottom: 1px solid #E6E3E8;
+          padding: 16px 48px;
+        }
+        .filter-top {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+        .search-wrap {
+          flex: 1;
+          max-width: 520px;
+          height: 48px;
+          border-radius: 14px;
+          background: white;
+          border: 1.5px solid #E6E3E8;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 16px;
+          box-shadow: 0 1px 2px rgba(28, 27, 31, 0.04), 0 2px 6px rgba(28, 27, 31, 0.05);
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .search-wrap:focus-within {
+          border-color: #7A62EA;
+          box-shadow: 0 0 0 3px rgba(122, 98, 234, 0.12);
+        }
+        .sort-select {
+          height: 48px;
+          border-radius: 14px;
+          padding: 0 16px;
+          border: 1.5px solid #E6E3E8;
+          background: white;
+          font-family: var(--font-montserrat), 'Montserrat', sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          color: #1C1B1F;
+          cursor: pointer;
+          outline: none;
+          box-shadow: 0 1px 2px rgba(28, 27, 31, 0.04), 0 2px 6px rgba(28, 27, 31, 0.05);
+          transition: border-color 0.2s;
+        }
+        .sort-select:focus {
+          border-color: #7A62EA;
+        }
+
+        .filter-chips {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .filter-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: #8A8792;
+          margin-right: 4px;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .chip {
+          padding: 8px 16px;
+          border-radius: 999px;
+          border: 1.5px solid #E6E3E8;
+          background: white;
+          font-family: var(--font-montserrat), 'Montserrat', sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          color: #5A5862;
+          cursor: pointer;
+          transition: all 0.15s cubic-bezier(0.2, 0, 0, 1);
+          box-shadow: 0 1px 2px rgba(28, 27, 31, 0.04), 0 2px 6px rgba(28, 27, 31, 0.05);
+        }
+        .chip:hover {
+          border-color: #9B86F0;
+          color: #7A62EA;
+        }
+        .chip.active {
+          background: #ECE7FC;
+          border-color: #7A62EA;
+          color: #7A62EA;
+          font-weight: 600;
+        }
+        .chip-clear {
+          padding: 8px 14px;
+          border-radius: 999px;
+          background: transparent;
+          border: 1.5px solid transparent;
+          font-size: 12px;
+          font-weight: 600;
+          color: #8A8792;
+          cursor: pointer;
+          transition: color 0.15s;
+        }
+        .chip-clear:hover {
+          color: #1C1B1F;
+        }
+
+        /* ── MAIN GRID ── */
+        .feed-body {
+          padding: 32px 48px 80px;
+          max-width: 1360px;
+          margin: 0 auto;
+        }
+        .feed-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 24px;
+        }
+        .feed-count {
+          font-size: 14px;
+          font-weight: 600;
+          color: #5A5862;
+        }
+        .tutor-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 20px;
+        }
+
+        /* ── TUTOR CARD ── */
+        .tcard {
+          background: white;
+          border-radius: 20px;
+          padding: 22px;
+          box-shadow: 0 2px 4px rgba(28, 27, 31, 0.04), 0 8px 20px rgba(28, 27, 31, 0.07);
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+            box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+          cursor: pointer;
+          animation: cardIn 0.4s cubic-bezier(0.2, 0, 0, 1) both;
+        }
+        .tcard:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 24px rgba(28, 27, 31, 0.1), 0 24px 56px rgba(28, 27, 31, 0.08);
+        }
+        .tcard:active {
+          transform: scale(0.98);
+        }
+        @keyframes cardIn {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .tcard-header {
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+        }
+        .tcard-avatar {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          display: grid;
+          place-items: center;
+          font-weight: 700;
+          font-size: 17px;
+          color: white;
+        }
+        .tcard-avatar-img {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          object-fit: cover;
+        }
+        .tcard-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .tcard-name {
+          font-size: 16px;
+          font-weight: 700;
+          color: #1C1B1F;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .tcard-school {
+          font-size: 13px;
+          color: #5A5862;
+          margin-top: 2px;
+        }
+        .tcard-rating {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-top: 5px;
+        }
+        .tcard-score {
+          font-size: 13px;
+          font-weight: 700;
+          color: #1C1B1F;
+        }
+        .tcard-match-pct {
+          font-size: 12px;
+          color: #8A8792;
+        }
+        .tcard-price {
+          font-size: 18px;
+          font-weight: 700;
+          color: #1C1B1F;
+          flex-shrink: 0;
+        }
+        .tcard-price span {
+          font-size: 12px;
+          font-weight: 500;
+          color: #8A8792;
+        }
+
+        .tcard-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .tcard-tag {
+          padding: 5px 12px;
+          border-radius: 999px;
+          background: #F6F3FE;
+          color: #7A62EA;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
+        .tcard-tag.secondary {
+          background: #F1EFE9;
+          color: #5A5862;
+        }
+
+        .tcard-meta {
+          border-top: 1px solid #E6E3E8;
+          padding-top: 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .tcard-meta-row {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          font-size: 12px;
+          color: #5A5862;
+        }
+        .tcard-meta-icon {
+          color: #8A8792;
+          flex-shrink: 0;
+        }
+
+        .btn-book {
+          width: 100%;
+          height: 44px;
+          border-radius: 999px;
+          border: none;
+          cursor: pointer;
+          background: linear-gradient(135deg, #3C1EE0 0%, #7A3AE8 45%, #C93FD8 100%);
+          color: white;
+          font-family: var(--font-montserrat), 'Montserrat', sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          box-shadow: 0 6px 16px rgba(122, 58, 232, 0.28);
+          transition: transform 0.12s, opacity 0.12s;
+        }
+        .btn-book:hover {
+          opacity: 0.9;
+        }
+        .btn-book:active {
+          transform: scale(0.97);
+        }
+        .btn-book-inline {
+          display: inline-block;
+          padding: 12px 32px;
+          border-radius: 999px;
+          border: none;
+          cursor: pointer;
+          background: linear-gradient(135deg, #3C1EE0 0%, #7A3AE8 45%, #C93FD8 100%);
+          color: white;
+          font-family: var(--font-montserrat), 'Montserrat', sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        /* ── FEATURED CARD ── */
+        .tcard.featured {
+          background: linear-gradient(135deg, #3C1EE0 0%, #7A3AE8 60%, #C93FD8 100%);
+          grid-column: span 2;
+        }
+        .tcard.featured .tcard-name {
+          color: white;
+        }
+        .tcard.featured .tcard-school {
+          color: rgba(255, 255, 255, 0.7);
+        }
+        .tcard.featured .tcard-score {
+          color: white;
+        }
+        .tcard.featured .tcard-match-pct {
+          color: rgba(255, 255, 255, 0.6);
+        }
+        .tcard.featured .tcard-price {
+          color: white;
+        }
+        .tcard.featured .tcard-price span {
+          color: rgba(255, 255, 255, 0.6);
+        }
+        .tcard.featured .tcard-tag {
+          background: rgba(255, 255, 255, 0.18);
+          color: white;
+        }
+        .tcard.featured .tcard-meta {
+          border-color: rgba(255, 255, 255, 0.15);
+        }
+        .tcard.featured .tcard-meta-row {
+          color: rgba(255, 255, 255, 0.75);
+        }
+        .tcard.featured .tcard-meta-icon {
+          color: rgba(255, 255, 255, 0.5);
+        }
+        .tcard.featured .btn-book {
+          background: white;
+          color: #7A3AE8;
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+        .featured-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          border-radius: 999px;
+          padding: 4px 12px;
+          font-size: 11px;
+          font-weight: 600;
+          color: white;
+          width: fit-content;
+          margin-bottom: 4px;
+        }
+
+        /* ── EMPTY STATE ── */
+        .empty-state {
+          text-align: center;
+          padding: 80px 24px;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 768px) {
+          .feed-hero {
+            padding: 40px 20px 36px;
+          }
+          .feed-hero-k {
+            font-size: 120px;
+            right: 20px;
+          }
+          .filter-bar {
+            padding: 14px 20px;
+          }
+          .filter-top {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .search-wrap {
+            max-width: none;
+          }
+          .sort-select {
+            width: 100%;
+          }
+          .feed-body {
+            padding: 24px 20px 60px;
+          }
+          .tutor-grid {
+            grid-template-columns: 1fr;
+          }
+          .tcard.featured {
+            grid-column: span 1;
+          }
+        }
+      `}</style>
     </>
   )
 }

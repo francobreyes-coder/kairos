@@ -57,8 +57,9 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), 'Geist Fallback';
-  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --font-sans: var(--font-montserrat), system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  --font-display: var(--font-shrikhand), serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -74,6 +75,21 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  /* Design-system brand tokens */
+  --color-ink: #1C1B1F;
+  --color-graphite: #5A5862;
+  --color-mute: #8A8792;
+  --color-surface: #F7F5F0;
+  --color-surface2: #F1EFE9;
+  --color-hairline: #E6E3E8;
+  --color-purple: #7A3AE8;
+  --color-purple-dark: #5B24CC;
+  --color-purple-mid: #9B62F0;
+  --color-purple-soft: #7A62EA;
+  --color-purple-400: #9B86F0;
+  --color-purple-100: #ECE7FC;
+  --color-purple-050: #F6F3FE;
+  --color-amber: #F5C242;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

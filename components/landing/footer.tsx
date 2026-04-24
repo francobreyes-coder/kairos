@@ -1,35 +1,20 @@
+import Link from 'next/link'
+
 export function Footer() {
   return (
-    <footer className="py-12 px-6 border-t border-border">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+    <footer className="bg-surface border-t border-hairline px-6 md:px-12 py-12 pb-8">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 flex-wrap">
+        <div className="font-display text-xl text-ink">kairos</div>
 
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">K</span>
-            </div>
-            <span className="font-semibold text-foreground">Kairos</span>
-          </div>
+        <div className="flex items-center gap-7">
+          <a href="#" className="text-[13px] text-graphite font-medium hover:text-ink transition-colors no-underline">Privacy</a>
+          <a href="#" className="text-[13px] text-graphite font-medium hover:text-ink transition-colors no-underline">Terms</a>
+          <Link href="/find-tutors" className="text-[13px] text-graphite font-medium hover:text-ink transition-colors no-underline">Find Tutors</Link>
+          <a href="mailto:hello@kairos.app" className="text-[13px] text-graphite font-medium hover:text-ink transition-colors no-underline">Contact</a>
+        </div>
 
-          {/* Links */}
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <a href="/privacy" className="hover:text-foreground transition-colors">
-              Privacy
-            </a>
-            <a href="/terms" className="hover:text-foreground transition-colors">
-              Terms
-            </a>
-            <a href="mailto:hello@kairos.app" className="hover:text-foreground transition-colors">
-              Contact
-            </a>
-          </div>
-
-          {/* Copyright */}
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Kairos. All rights reserved.
-          </p>
-
+        <div className="text-[12px] text-mute">
+          © {new Date().getFullYear()} Kairos. the right guidance, at the right time.
         </div>
       </div>
     </footer>

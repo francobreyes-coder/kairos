@@ -4,53 +4,46 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Warm cream/parchment background */
-  --background: oklch(0.97 0.005 85);
-  --foreground: oklch(0.18 0.02 70);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 70);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 70);
-  --primary: oklch(0.25 0.02 70);
-  --primary-foreground: oklch(0.97 0.005 85);
-  --secondary: oklch(0.94 0.008 85);
-  --secondary-foreground: oklch(0.25 0.02 70);
-  --muted: oklch(0.92 0.008 85);
-  --muted-foreground: oklch(0.5 0.02 70);
-  /* Purple accent — the key brand color */
-  --accent: oklch(0.55 0.15 290);
-  --accent-foreground: oklch(0.98 0 0);
+  --purple: #7A3AE8;
+  --purple-dark: #5B24CC;
+  --purple-mid: #9B62F0;
+  --purple-soft: #7A62EA;
+  --ink: #1C1B1F;
+  --graphite: #5A5862;
+  --mute: #8A8792;
+  --surface: #F7F5F0;
+  --surface2: #F1EFE9;
+  --white: #FFFFFF;
+  --hairline: #E6E3E8;
+  --gradient-accent: linear-gradient(135deg, #3C1EE0 0%, #7A3AE8 45%, #C93FD8 100%);
+  --gradient-soft: linear-gradient(135deg, #82AAEE 0%, #B47AE8 50%, #E882CC 100%);
+
+  /* Tailwind theme compat */
+  --background: #F7F5F0;
+  --foreground: #1C1B1F;
+  --card: #FFFFFF;
+  --card-foreground: #1C1B1F;
+  --primary: #1C1B1F;
+  --primary-foreground: #F7F5F0;
+  --secondary: #F1EFE9;
+  --secondary-foreground: #1C1B1F;
+  --muted: #F1EFE9;
+  --muted-foreground: #8A8792;
+  --accent: #7A3AE8;
+  --accent-foreground: #FFFFFF;
+  --border: #E6E3E8;
+  --input: #F1EFE9;
+  --ring: #7A3AE8;
+  --radius: 0.75rem;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1B1F;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.88 0.01 85);
-  --input: oklch(0.92 0.008 85);
-  --ring: oklch(0.55 0.15 290);
-  --radius: 0.75rem;
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.55 0.15 290);
-  --accent-foreground: oklch(0.985 0 0);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.55 0.15 290);
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), 'Geist Fallback';
-  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --font-sans: var(--font-montserrat), 'Montserrat', system-ui, sans-serif;
+  --font-display: var(--font-shrikhand), 'Shrikhand', serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -66,10 +59,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-surface: #F7F5F0;
+  --color-surface2: #F1EFE9;
+  --color-ink: #1C1B1F;
+  --color-graphite: #5A5862;
+  --color-purple: #7A3AE8;
+  --color-purple-soft: #7A62EA;
+  --color-purple-mid: #9B62F0;
+  --color-hairline: #E6E3E8;
 }
 
 @layer base {
@@ -78,5 +81,35 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
   }
+}
+
+/* Scroll reveal animation */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.6s cubic-bezier(.2,.0,.0,1), transform 0.6s cubic-bezier(.2,.0,.0,1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(6px); }
+}
+
+@keyframes scroll-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }

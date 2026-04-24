@@ -1,70 +1,89 @@
-import { Heart, Brain, Shield } from 'lucide-react'
+'use client'
 
-const services = [
+import { useEffect, useRef } from 'react'
+import { Heart, Sun, Shield } from 'lucide-react'
+
+const cards = [
   {
     icon: Heart,
-    title: 'Pathos',
-    subtitle: 'Essays',
-    description:
-      "Work with tutors who crafted winning essays. Get feedback on structure, voice, and authenticity from students who've been accepted to your dream schools.",
-    color: 'text-rose-500',
-    bgColor: 'bg-rose-500/10',
-    borderHover: 'hover:border-rose-500/30',
+    label: 'Pathos',
+    title: 'Write compelling essays.',
+    body: "Work with tutors who crafted winning essays. Get feedback on structure, voice, and authenticity from students who've been accepted to your dream schools.",
+    iconBg: '#ECE7FC',
+    iconColor: '#BDB0F5',
+    stripe: 'linear-gradient(90deg, #BDB0F5, #9B86F0)',
+    delay: 'reveal-delay-1',
   },
   {
-    icon: Brain,
-    title: 'Logos',
-    subtitle: 'Test Prep',
-    description:
-      'Learn proven strategies from high scorers. Our tutors share the techniques that helped them achieve top SAT, ACT, and AP scores.',
-    color: 'text-violet-500',
-    bgColor: 'bg-violet-500/10',
-    borderHover: 'hover:border-violet-500/30',
+    icon: Sun,
+    label: 'Logos',
+    title: 'Ace your standardized tests.',
+    body: 'Our tutors share the techniques that helped them achieve top SAT & ACT scores. Data-driven prep, from people who actually used it.',
+    iconBg: '#E5E0F6',
+    iconColor: '#9B86F0',
+    stripe: 'linear-gradient(90deg, #9B86F0, #7A62EA)',
+    delay: 'reveal-delay-2',
   },
   {
     icon: Shield,
-    title: 'Ethos',
-    subtitle: 'Activities',
-    description:
-      'Build a compelling activities list with guidance from students who stood out. Learn how to frame your experiences for maximum impact.',
-    color: 'text-emerald-500',
-    bgColor: 'bg-emerald-500/10',
-    borderHover: 'hover:border-emerald-500/30',
+    label: 'Ethos',
+    title: 'Build an impressive activities list.',
+    body: 'Get guidance from students who stood out. Learn how to frame your experiences for maximum impact, from people admissions officers actually noticed.',
+    iconBg: '#DDD8F2',
+    iconColor: '#7A62EA',
+    stripe: 'linear-gradient(90deg, #7A62EA, #6C52E0)',
+    delay: 'reveal-delay-3',
   },
 ]
 
 export function HowItWorks() {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const els = sectionRef.current?.querySelectorAll('.reveal')
+    if (!els) return
+    const obs = new IntersectionObserver(
+      (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add('visible') }),
+      { threshold: 0.12 }
+    )
+    els.forEach((el) => obs.observe(el))
+    return () => obs.disconnect()
+  }, [])
+
   return (
-    <section id="how-it-works" className="py-24 px-6">
-      <div className="mx-auto max-w-6xl">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl tracking-tight bg-gradient-to-r from-purple-600 via-purple-500 to-pink-400 bg-clip-text text-transparent" style={{ fontFamily: 'Shrikhand, cursive' }}>
-            Three Pillars of Success
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-            Our tutors specialize in the areas that matter most. Connect with experts in essays,
-            testing, and activities.
-          </p>
+    <section id="how-it-works" className="bg-surface py-24 px-6 md:px-12" ref={sectionRef}>
+      <div className="max-w-[1120px] mx-auto">
+        <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-purple-soft mb-3 reveal">
+          How It Works
         </div>
+        <h2 className="text-[clamp(32px,4.5vw,52px)] font-bold leading-[1.1] tracking-tight text-ink max-w-[560px] reveal reveal-delay-1">
+          A successful college application?<br />
+          <em className="italic text-purple-soft">Think back to Aristotle.</em>
+        </h2>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {services.map((service) => (
+        <div className="grid md:grid-cols-3 gap-6 mt-14">
+          {cards.map((card) => (
             <div
-              key={service.title}
-              className={`group relative p-8 rounded-2xl bg-card border border-border ${service.borderHover} transition-all duration-300 hover:shadow-lg hover:shadow-foreground/5`}
+              key={card.label}
+              className={`bg-white rounded-[20px] p-7 relative overflow-hidden reveal ${card.delay}`}
+              style={{ boxShadow: '0 2px 4px rgba(28,27,31,.04), 0 8px 20px rgba(28,27,31,.07)' }}
             >
+              <div className="absolute top-0 left-0 right-0 h-1" style={{ background: card.stripe }} />
               <div
-                className={`w-12 h-12 rounded-xl ${service.bgColor} flex items-center justify-center mb-6`}
+                className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center mb-5"
+                style={{ background: card.iconBg }}
               >
-                <service.icon className={`w-6 h-6 ${service.color}`} />
+                <card.icon className="w-[26px] h-[26px]" style={{ color: card.iconColor }} />
               </div>
-
-              <div className="flex items-baseline gap-2 mb-3">
-                <h3 className="text-xl font-semibold text-foreground">{service.title}</h3>
-                <span className="text-sm text-muted-foreground">/ {service.subtitle}</span>
+              <div className="text-[11px] font-semibold tracking-[0.1em] uppercase text-mute mb-2">
+                {card.label}
               </div>
-
-              <p className="text-muted-foreground leading-relaxed">{service.description}</p>
+              <div className="text-[20px] font-bold text-ink mb-3 tracking-tight">
+                {card.title}
+              </div>
+              <div className="text-[14px] leading-[1.65] text-graphite">
+                {card.body}
+              </div>
             </div>
           ))}
         </div>

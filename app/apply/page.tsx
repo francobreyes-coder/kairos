@@ -266,11 +266,6 @@ export default function ApplyPage() {
     form.graduationYear.length > 0,
     form.major.trim().length > 0,
     form.services.length > 0,
-    wordCount(form.passion) >= 10,
-    wordCount(form.whyKairos) >= 10,
-    hasFile('video'),
-    hasFile('resume'),
-    hasFile('proof'),
   ]
   const progress = Math.round((checks.filter(Boolean).length / checks.length) * 100)
 
@@ -515,7 +510,6 @@ export default function ApplyPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">
                   Tell us briefly about something you are passionate about.
-                  <span className="text-accent ml-1">*</span>
                 </label>
                 <textarea
                   value={form.passion}
@@ -532,7 +526,6 @@ export default function ApplyPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">
                   Why do you want to become a Kairos tutor?
-                  <span className="text-accent ml-1">*</span>
                 </label>
                 <textarea
                   value={form.whyKairos}
@@ -557,7 +550,6 @@ export default function ApplyPage() {
                 label="One-Minute Video Introduction"
                 hint="Upload a ~1 minute video telling us about yourself"
                 accept="video/*"
-                required
                 value={files.video}
                 savedRef={savedFiles.video}
                 uploading={uploading.video}
@@ -569,7 +561,6 @@ export default function ApplyPage() {
                 label="Resume"
                 hint="PDF or Word document (.pdf, .doc, .docx)"
                 accept=".pdf,.doc,.docx"
-                required
                 value={files.resume}
                 savedRef={savedFiles.resume}
                 uploading={uploading.resume}
@@ -581,7 +572,6 @@ export default function ApplyPage() {
                 label="Proof of Admission"
                 hint="Student ID, Canvas screenshot, or acceptance letter"
                 accept="image/*,.pdf"
-                required
                 value={files.proof}
                 savedRef={savedFiles.proof}
                 uploading={uploading.proof}

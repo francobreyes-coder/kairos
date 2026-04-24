@@ -137,8 +137,77 @@ export function computeMatchScore(student: StudentProfile, tutor: TutorProfile):
   return { tutor, score, reasons }
 }
 
-export function rankTutors(student: StudentProfile, tutors: TutorProfile[]): MatchResult[] {
+/**
+ * Computes a booking-history bonus for a tutor based on similarity
+ * to tutors the student has previously booked.
+ *
+ * Max bonus: 30 pts (subject overlap + college match + major match + style match)
+ */
+export function computeBookingBonus(tutor: TutorProfile, bookedTutors: TutorProfile[]): { bonus: number; reasons: string[] } {
+  if (bookedTutors.length === 0) return { bonus: 0, reasons: [] }
+
+  let bonus = 0
+  const reasons: string[] = []
+
+  // Collect attributes from all previously booked tutors
+  const bookedSubjects = new Set<string>()
+  const bookedColleges = new Set<string>()
+  const bookedMajors = new Set<string>()
+  const bookedStyles = new Set<string>()
+
+  for (const bt of bookedTutors) {
+    if (bt.user_id === tutor.user_id) continue // skip self
+    for (const s of bt.subjects) bookedSubjects.add(normalize(s))
+    if (bt.college) bookedColleges.add(normalize(bt.college))
+    if (bt.major) bookedMajors.add(normalize(bt.major))
+    if (bt.teaching_style) bookedStyles.add(normalize(bt.teaching_style))
+  }
+
+  // Subject overlap with booked tutors (max 12 pts)
+  const matchedSubjects = tutor.subjects.filter((s) => bookedSubjects.has(normalize(s)))
+  const subjectBonus = Math.min(matchedSubjects.length * 4, 12)
+  bonus += subjectBonus
+  if (matchedSubjects.length > 0) {
+    reasons.push(`Teaches subjects similar to tutors you've booked`)
+  }
+
+  // Same college as a booked tutor (8 pts)
+  if (tutor.college && bookedColleges.has(normalize(tutor.college))) {
+    bonus += 8
+    reasons.push(`From ${tutor.college}, like a tutor you've worked with`)
+  }
+
+  // Same or similar major (6 pts)
+  if (tutor.major) {
+    const tutorMajorNorm = normalize(tutor.major)
+    const majorMatch = [...bookedMajors].some((bm) =>
+      bm === tutorMajorNorm || bm.includes(tutorMajorNorm) || tutorMajorNorm.includes(bm)
+    )
+    if (majorMatch) {
+      bonus += 6
+      reasons.push(`Studies a similar major to your past tutors`)
+    }
+  }
+
+  // Same teaching style (4 pts)
+  if (tutor.teaching_style && bookedStyles.has(normalize(tutor.teaching_style))) {
+    bonus += 4
+    reasons.push(`Same teaching style as a tutor you liked`)
+  }
+
+  return { bonus, reasons }
+}
+
+export function rankTutors(student: StudentProfile, tutors: TutorProfile[], bookedTutors?: TutorProfile[]): MatchResult[] {
   return tutors
-    .map((tutor) => computeMatchScore(student, tutor))
+    .map((tutor) => {
+      const result = computeMatchScore(student, tutor)
+      if (bookedTutors && bookedTutors.length > 0) {
+        const { bonus, reasons } = computeBookingBonus(tutor, bookedTutors)
+        result.score += bonus
+        result.reasons.push(...reasons)
+      }
+      return result
+    })
     .sort((a, b) => b.score - a.score)
 }

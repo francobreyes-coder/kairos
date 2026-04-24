@@ -100,7 +100,27 @@ export async function GET() {
     tutor_personality: student?.tutor_personality ?? [],
   }
 
-  const ranked = rankTutors(studentProfile, tutors as TutorProfile[])
+  // Fetch tutors the student has previously booked to prioritize similar tutors
+  let bookedTutorProfiles: TutorProfile[] = []
+  const { data: bookedSessions } = await supabase
+    .from('sessions')
+    .select('tutor_id')
+    .eq('student_id', session.user.id)
+    .eq('status', 'confirmed')
+
+  if (bookedSessions && bookedSessions.length > 0) {
+    const bookedTutorIds = [...new Set(bookedSessions.map((s) => s.tutor_id))]
+    const { data: bookedTutors } = await supabase
+      .from('tutor_profiles')
+      .select('user_id, bio, profile_photo, subjects, college, major, interests, teaching_style, services, service_prices, availability, profile_completed')
+      .in('user_id', bookedTutorIds)
+
+    if (bookedTutors) {
+      bookedTutorProfiles = bookedTutors as TutorProfile[]
+    }
+  }
+
+  const ranked = rankTutors(studentProfile, tutors as TutorProfile[], bookedTutorProfiles)
 
   const matches = ranked.map((m) => ({
     userId: m.tutor.user_id,

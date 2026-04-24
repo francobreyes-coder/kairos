@@ -1,12 +1,16 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono, Playfair_Display } from 'next/font/google'
+import { Montserrat } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
-const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
-const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-playfair', style: ['italic'], weight: ['700', '900'] })
+const montserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat' })
+const shrikhand = localFont({
+  src: '../public/fonts/Shrikhand-Regular.ttf',
+  variable: '--font-shrikhand',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Kairos | Learn from Students Who Just Did It',
@@ -30,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} ${playfair.variable} bg-background`}>
+    <html lang="en" className={`${montserrat.variable} ${shrikhand.variable} bg-background`}>
       <body className="font-sans antialiased">
         <Providers>
           {children}
