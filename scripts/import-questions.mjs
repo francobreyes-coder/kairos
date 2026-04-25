@@ -38,6 +38,7 @@ for (let i = 0; i < questions.length; i++) {
     explanation: q.explanation?.trim() ?? '',
     tags: q.tags ?? [],
     time_estimate: q.time_estimate ?? null,
+    figures: q.figures ?? [],
   }
 
   const { error } = await supabase.from('questions').insert(normalized)
