@@ -15,6 +15,11 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
+interface Figure {
+  url: string
+  caption: string
+}
+
 interface Question {
   id: string
   subject: string
@@ -23,6 +28,7 @@ interface Question {
   question_text: string
   answer_choices: { label: string; text: string }[]
   correct_answer: string
+  figures: Figure[]
 }
 
 interface Test {
@@ -147,9 +153,31 @@ export default function ViewTestPage({ params }: { params: Promise<{ id: string 
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground leading-relaxed mb-3">
+                    <p className="text-sm text-foreground leading-relaxed mb-3 whitespace-pre-wrap">
                       {q.question_text}
                     </p>
+
+                    {q.figures && q.figures.length > 0 && (
+                      <div className="space-y-3 mb-3">
+                        {q.figures.map((fig, fi) => (
+                          <figure
+                            key={fi}
+                            className="rounded-xl border border-border bg-secondary/30 p-3"
+                          >
+                            <img
+                              src={fig.url}
+                              alt={fig.caption || `Figure ${fi + 1}`}
+                              className="w-full max-w-xl mx-auto rounded-lg bg-white"
+                            />
+                            {fig.caption && (
+                              <figcaption className="text-xs text-muted-foreground mt-2 text-center">
+                                {fig.caption}
+                              </figcaption>
+                            )}
+                          </figure>
+                        ))}
+                      </div>
+                    )}
 
                     {q.answer_choices.length > 0 && (
                       <div className="space-y-1.5 mb-3">

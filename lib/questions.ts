@@ -1,5 +1,10 @@
 import { getSupabase } from './supabase'
 
+export interface QuestionFigure {
+  url: string
+  caption: string
+}
+
 export interface Question {
   id: string
   exam_type: 'SAT' | 'ACT'
@@ -12,6 +17,7 @@ export interface Question {
   explanation: string
   tags: string[]
   time_estimate: number | null
+  figures: QuestionFigure[]
   created_at: string
   updated_at: string
 }

@@ -28,6 +28,7 @@ interface Question {
   question_text: string
   answer_choices: { label: string; text: string }[]
   correct_answer: string
+  figures: { url: string; caption: string }[]
 }
 
 type Step = 'filters' | 'preview' | 'save'
@@ -395,6 +396,11 @@ export default function CreateTestPage() {
                             {q.question_text}
                           </p>
                           <div className="flex items-center gap-2 mt-2">
+                            {q.figures && q.figures.length > 0 && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                                {q.figures.length} figure{q.figures.length > 1 ? 's' : ''}
+                              </span>
+                            )}
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
                               {q.subject}
                             </span>
