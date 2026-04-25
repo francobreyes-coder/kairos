@@ -39,8 +39,11 @@ dev-err*.txt
 
 # question bank data artifacts (extracted locally, not checked in)
 /questions.json
+/questions-with-figures.json
 /answer-keys.json
 /*.json.bak
+/extract-test.log
+/sample-fig.png
 
 # supabase CLI temp
 /supabase/.temp/
