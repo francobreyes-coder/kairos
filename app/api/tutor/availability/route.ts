@@ -59,8 +59,13 @@ export async function GET(req: NextRequest) {
     (booked ?? []).map((b) => `${b.scheduled_date}_${b.time_slot}`)
   )
 
-  // Build available slots per day, excluding past dates and booked slots
-  const today = new Date().toISOString().split('T')[0]
+  // Build available slots per day, excluding past dates and booked slots.
+  // For today, also mark slots whose hour has already started as unavailable
+  // so the user only sees genuinely-bookable times (e.g. afternoon slots
+  // when it's already noon).
+  const now = new Date()
+  const today = now.toISOString().split('T')[0]
+  const currentHour = now.getHours()
   const slots: Record<string, { time: string; date: string; available: boolean }[]> = {}
 
   for (const day of DAYS) {
@@ -70,23 +75,39 @@ export async function GET(req: NextRequest) {
     const date = dayDates[day]
     if (date < today) continue // skip past dates
 
-    slots[day] = daySlots.map((time) => ({
-      time,
-      date,
-      available: !bookedSet.has(`${date}_${time}`),
-    }))
+    slots[day] = daySlots.map((time) => {
+      const isBooked = bookedSet.has(`${date}_${time}`)
+      const slotHour = parseSlotHour(time)
+      const isPastToday = date === today && slotHour >= 0 && slotHour <= currentHour
+      return {
+        time,
+        date,
+        available: !isBooked && !isPastToday,
+      }
+    })
   }
 
   return NextResponse.json({ slots, dayDates })
 }
 
+// Parse "8:00 AM" / "1:00 PM" into a 0–23 hour. Returns -1 if unparseable.
+function parseSlotHour(s: string): number {
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!m) return -1
+  let h = parseInt(m[1], 10)
+  const ampm = m[3].toUpperCase()
+  if (ampm === 'PM' && h !== 12) h += 12
+  if (ampm === 'AM' && h === 12) h = 0
+  return h
+}
+
+// Returns the Monday of the week containing today (Sun=0..Sat=6).
 function getNextMonday(): Date {
   const now = new Date()
   const day = now.getDay()
-  // If today is Monday (1), use today. Otherwise find next Monday.
-  const diff = day === 0 ? 1 : day === 1 ? 0 : 8 - day
+  const daysSinceMonday = day === 0 ? 6 : day - 1
   const monday = new Date(now)
-  monday.setDate(now.getDate() + diff)
+  monday.setDate(now.getDate() - daysSinceMonday)
   monday.setHours(0, 0, 0, 0)
   return monday
 }

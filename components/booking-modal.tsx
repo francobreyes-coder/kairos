@@ -36,12 +36,14 @@ const SERVICE_LABELS: Record<string, string> = {
   'activities': 'Activities',
 }
 
+// Returns the Monday of the week containing today, shifted by `offset` weeks.
+// Sun=0, Mon=1, ..., Sat=6. This week's Monday is "daysSinceMonday" days back.
 function getMonday(offset: number): Date {
   const now = new Date()
   const day = now.getDay()
-  const diff = day === 0 ? 1 : day === 1 ? 0 : 8 - day
+  const daysSinceMonday = day === 0 ? 6 : day - 1
   const monday = new Date(now)
-  monday.setDate(now.getDate() + diff + offset * 7)
+  monday.setDate(now.getDate() - daysSinceMonday + offset * 7)
   monday.setHours(0, 0, 0, 0)
   return monday
 }
