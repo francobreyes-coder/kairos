@@ -118,6 +118,11 @@ export default function VideoSessionPage() {
     if (!sessionId || callFrameRef.current) return
     setConnectionState('loading')
 
+    // Failsafe: if joined-meeting never fires (network or media block), the
+    // user would otherwise watch an infinite spinner. Surface an error after
+    // 30s so they can retry.
+    let joinTimeout: ReturnType<typeof setTimeout> | null = null
+
     try {
       // Get meeting token from our API
       const res = await fetch(`/api/video-room?sessionId=${sessionId}`)
@@ -144,6 +149,7 @@ export default function VideoSessionPage() {
       })
 
       callFrame.on('joined-meeting', () => {
+        if (joinTimeout) clearTimeout(joinTimeout)
         setConnectionState('joined')
         setParticipantCount(Object.keys(callFrame.participants()).length)
       })
@@ -161,25 +167,40 @@ export default function VideoSessionPage() {
       })
 
       callFrame.on('left-meeting', () => {
+        if (joinTimeout) clearTimeout(joinTimeout)
         setConnectionState('left')
         setParticipantCount(0)
       })
 
       callFrame.on('error', (e: any) => {
         console.error('Daily.co error:', e)
-        setError('Video connection error. Please try refreshing the page.')
+        if (joinTimeout) clearTimeout(joinTimeout)
+        setError(e?.errorMsg || 'Video connection error. Please try refreshing the page.')
         setConnectionState('error')
       })
 
       callFrameRef.current = callFrame
 
+      joinTimeout = setTimeout(() => {
+        if (callFrameRef.current && connectionState !== 'joined') {
+          console.error('Daily.co join timed out after 30s')
+          setError(
+            'The video call did not connect. Check your network and camera/microphone permissions, then try again.',
+          )
+          setConnectionState('error')
+          callFrameRef.current.destroy?.()
+          callFrameRef.current = null
+        }
+      }, 30000)
+
       await callFrame.join({ url: roomUrl, token })
     } catch (e: any) {
+      if (joinTimeout) clearTimeout(joinTimeout)
       console.error('Failed to join call:', e)
       setError(e.message || 'Failed to join video call')
       setConnectionState('error')
     }
-  }, [sessionId])
+  }, [sessionId, connectionState])
 
   // Toggle camera
   const toggleCamera = useCallback(() => {
@@ -390,14 +411,17 @@ export default function VideoSessionPage() {
             {/* Daily.co iframe container */}
             <div ref={containerRef} className="w-full h-full" />
 
-            {/* Pre-join overlay */}
-            {(connectionState === 'idle' || connectionState === 'loading' || connectionState === 'joining') && (
+            {/* Pre-join overlay. We deliberately drop it for the 'joining'
+                state so the Daily iframe (which may show a brief device
+                check or permission prompt) is interactive — covering it
+                with a spinner is what made earlier joins hang forever. */}
+            {(connectionState === 'idle' || connectionState === 'loading') && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-10">
-                {connectionState === 'loading' || connectionState === 'joining' ? (
+                {connectionState === 'loading' ? (
                   <>
                     <Loader2 className="w-10 h-10 text-accent animate-spin mb-4" />
                     <p className="text-white text-lg font-medium">
-                      {connectionState === 'loading' ? 'Preparing video room...' : 'Joining call...'}
+                      Preparing video room...
                     </p>
                   </>
                 ) : (

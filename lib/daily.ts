@@ -48,6 +48,11 @@ export async function createVideoRoom(sessionId: string, scheduledDate: string, 
         exp: expiry,
         enable_chat: true,
         enable_knocking: false,
+        // Skip Daily's prejoin device-check screen. With prejoin on, the
+        // SDK waits for an in-iframe "Join meeting" click that our overlay
+        // covers, so joined-meeting never fires and the page hangs on the
+        // spinner.
+        enable_prejoin_ui: false,
         start_video_off: false,
         start_audio_off: false,
         max_participants: 2,
