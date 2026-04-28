@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { listActiveRoomNames } from '@/lib/daily'
@@ -10,19 +10,24 @@ import { listActiveRoomNames } from '@/lib/daily'
  * Daily.co room currently has at least one participant. The student's
  * sessions page polls this so it can surface a Join button as soon as
  * the tutor (or anyone else) joins, regardless of the scheduled time.
+ *
+ * Append ?debug=1 to surface the intermediate state (rooms checked,
+ * active rooms returned by Daily, presence error if any) without
+ * leaking it into the normal response shape.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const authSession = await auth()
   if (!authSession?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const debug = req.nextUrl.searchParams.get('debug') === '1'
   const userId = authSession.user.id
   const supabase = getSupabase()
 
   const { data: rows, error } = await supabase
     .from('sessions')
-    .select('id, video_room_name, student_id, tutor_id')
+    .select('id, video_room_name, student_id, tutor_id, status')
     .eq('status', 'confirmed')
     .or(`student_id.eq.${userId},tutor_id.eq.${userId}`)
 
@@ -32,21 +37,48 @@ export async function GET() {
 
   const userSessions = (rows ?? []).filter((r) => r.video_room_name)
   if (userSessions.length === 0) {
-    return NextResponse.json({ activeIds: [] })
+    return NextResponse.json(
+      debug
+        ? {
+            activeIds: [],
+            debug: {
+              userId,
+              totalSessions: rows?.length ?? 0,
+              sessionsWithRoom: 0,
+              note: 'No confirmed session has a video_room_name yet',
+            },
+          }
+        : { activeIds: [] },
+    )
   }
 
   let active: Set<string>
+  let presenceError: string | undefined
   try {
     active = await listActiveRoomNames()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to fetch Daily.co presence:', e)
-    // Fail closed (no false positives), but don't block the page.
-    return NextResponse.json({ activeIds: [] })
+    presenceError = e?.message || String(e)
+    active = new Set()
   }
 
   const activeIds = userSessions
     .filter((r) => active.has(r.video_room_name as string))
     .map((r) => r.id)
+
+  if (debug) {
+    return NextResponse.json({
+      activeIds,
+      debug: {
+        userId,
+        totalSessions: rows?.length ?? 0,
+        sessionsWithRoom: userSessions.length,
+        userRoomNames: userSessions.map((r) => r.video_room_name),
+        activeRoomsFromDaily: Array.from(active),
+        presenceError,
+      },
+    })
+  }
 
   return NextResponse.json({ activeIds })
 }
