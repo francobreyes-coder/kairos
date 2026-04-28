@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
-import { createMeetingToken } from '@/lib/daily'
+import { createMeetingToken, createVideoRoom } from '@/lib/daily'
 
 /**
  * GET /api/video-room?sessionId=<uuid>
@@ -43,8 +43,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Session is cancelled' }, { status: 400 })
   }
 
-  if (!session.video_room_name) {
-    return NextResponse.json({ error: 'No video room for this session' }, { status: 404 })
+  // Recover from earlier failed room creation: if the session has no room
+  // yet, try to create one now and persist it. This handles sessions that
+  // were booked before the timezone-aware expiry fix landed.
+  let roomName = session.video_room_name as string | null
+  let roomUrl = session.video_room_url as string | null
+  if (!roomName) {
+    try {
+      const created = await createVideoRoom(
+        session.id,
+        session.scheduled_date,
+        session.time_slot,
+      )
+      roomName = created.roomName
+      roomUrl = created.roomUrl
+      await supabase
+        .from('sessions')
+        .update({ video_room_name: roomName, video_room_url: roomUrl })
+        .eq('id', session.id)
+    } catch (e) {
+      console.error('Lazy video room creation failed:', e)
+      return NextResponse.json(
+        { error: 'No video room for this session' },
+        { status: 500 },
+      )
+    }
   }
 
   // Resolve the user's display name
@@ -66,14 +89,14 @@ export async function GET(req: NextRequest) {
 
   // Generate a scoped meeting token
   const token = await createMeetingToken({
-    roomName: session.video_room_name,
+    roomName,
     userId,
     userName,
   })
 
   return NextResponse.json({
     token,
-    roomUrl: session.video_room_url,
-    roomName: session.video_room_name,
+    roomUrl,
+    roomName,
   })
 }
