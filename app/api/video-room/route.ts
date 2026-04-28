@@ -43,31 +43,40 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Session is cancelled' }, { status: 400 })
   }
 
-  // Recover from earlier failed room creation: if the session has no room
-  // yet, try to create one now and persist it. This handles sessions that
-  // were booked before the timezone-aware expiry fix landed.
-  let roomName = session.video_room_name as string | null
-  let roomUrl = session.video_room_url as string | null
-  if (!roomName) {
-    try {
-      const created = await createVideoRoom(
-        session.id,
-        session.scheduled_date,
-        session.time_slot,
-      )
-      roomName = created.roomName
-      roomUrl = created.roomUrl
-      await supabase
-        .from('sessions')
-        .update({ video_room_name: roomName, video_room_url: roomUrl })
-        .eq('id', session.id)
-    } catch (e) {
-      console.error('Lazy video room creation failed:', e)
+  // Always run room create-or-update so existing rooms pick up our current
+  // config (e.g. enable_prejoin_ui: false, refreshed expiry). createVideoRoom
+  // is idempotent — if the room exists, it patches its properties instead
+  // of erroring. This heals rooms that were created before later fixes
+  // landed without requiring a database migration or manual cleanup.
+  let roomName: string
+  let roomUrl: string
+  try {
+    const result = await createVideoRoom(
+      session.id,
+      session.scheduled_date,
+      session.time_slot,
+    )
+    roomName = result.roomName
+    roomUrl = result.roomUrl
+  } catch (e) {
+    console.error('Video room create/update failed:', e)
+    if (session.video_room_name) {
+      // Fallback: at least let the user try the existing room.
+      roomName = session.video_room_name as string
+      roomUrl = session.video_room_url as string
+    } else {
       return NextResponse.json(
         { error: 'No video room for this session' },
         { status: 500 },
       )
     }
+  }
+
+  if (session.video_room_name !== roomName || session.video_room_url !== roomUrl) {
+    await supabase
+      .from('sessions')
+      .update({ video_room_name: roomName, video_room_url: roomUrl })
+      .eq('id', session.id)
   }
 
   // Resolve the user's display name

@@ -29,54 +29,66 @@ interface CreateRoomResult {
   roomUrl: string
 }
 
-export async function createVideoRoom(sessionId: string, scheduledDate: string, timeSlot: string): Promise<CreateRoomResult> {
+export async function createVideoRoom(
+  sessionId: string,
+  scheduledDate: string,
+  timeSlot: string,
+): Promise<CreateRoomResult> {
   const roomName = `session-${sessionId}`
-
-  // Parse scheduled end time (session + 1.5 hours buffer)
   const expiry = computeRoomExpiry(scheduledDate, timeSlot)
 
-  const res = await fetch(`${DAILY_API}/rooms`, {
+  // Properties we want every session room to have. Re-applied to existing
+  // rooms so that older rooms (which were created before enable_prejoin_ui
+  // was added, or with a stale `exp`) get healed on the next join.
+  const properties = {
+    exp: expiry,
+    enable_chat: true,
+    enable_knocking: false,
+    // Skip Daily's prejoin device-check screen. With prejoin on, the SDK
+    // waits for an in-iframe "Join meeting" click; if that's missed the
+    // tutor never actually enters the call and presence stays empty.
+    enable_prejoin_ui: false,
+    start_video_off: false,
+    start_audio_off: false,
+    max_participants: 2,
+  }
+
+  const auth = { Authorization: `Bearer ${getApiKey()}`, 'Content-Type': 'application/json' }
+
+  const createRes = await fetch(`${DAILY_API}/rooms`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${getApiKey()}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: roomName,
-      privacy: 'private', // requires token to join
-      properties: {
-        exp: expiry,
-        enable_chat: true,
-        enable_knocking: false,
-        // Skip Daily's prejoin device-check screen. With prejoin on, the
-        // SDK waits for an in-iframe "Join meeting" click that our overlay
-        // covers, so joined-meeting never fires and the page hangs on the
-        // spinner.
-        enable_prejoin_ui: false,
-        start_video_off: false,
-        start_audio_off: false,
-        max_participants: 2,
-      },
-    }),
+    headers: auth,
+    body: JSON.stringify({ name: roomName, privacy: 'private', properties }),
   })
 
-  if (!res.ok) {
-    const err = await res.text()
-    // If room already exists, return the existing URL
-    if (res.status === 400 && err.includes('already exists')) {
-      return {
-        roomName,
-        roomUrl: `https://${getDomain()}.daily.co/${roomName}`,
-      }
-    }
-    throw new Error(`Daily.co room creation failed: ${res.status} ${err}`)
+  if (createRes.ok) {
+    const room = await createRes.json()
+    return { roomName: room.name, roomUrl: room.url }
   }
 
-  const room = await res.json()
-  return {
-    roomName: room.name,
-    roomUrl: room.url,
+  const errText = await createRes.text()
+  // Already exists — update properties so prior rooms pick up our latest
+  // config (disable prejoin, extend expiry, etc.).
+  if (createRes.status === 400 && errText.includes('already exists')) {
+    const updateRes = await fetch(
+      `${DAILY_API}/rooms/${encodeURIComponent(roomName)}`,
+      {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ properties }),
+      },
+    )
+    if (!updateRes.ok) {
+      const err = await updateRes.text()
+      console.error(`Daily.co room update failed: ${updateRes.status} ${err}`)
+    }
+    return {
+      roomName,
+      roomUrl: `https://${getDomain()}.daily.co/${roomName}`,
+    }
   }
+
+  throw new Error(`Daily.co room creation failed: ${createRes.status} ${errText}`)
 }
 
 /* ------------------------------------------------------------------ */
