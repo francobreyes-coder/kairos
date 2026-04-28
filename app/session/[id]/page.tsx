@@ -137,6 +137,19 @@ export default function VideoSessionPage() {
       // Dynamically import Daily.co to avoid SSR issues
       const DailyIframe = (await import('@daily-co/daily-js')).default
 
+      // Tear down any leftover global Daily instance from a prior attempt
+      // (back/forward nav, hot reload, partial join). A leaked frame holds
+      // the camera, which is exactly what triggers "another application is
+      // using it" on the next try. Daily.js enforces a single instance per
+      // page, so this also avoids the "duplicate DailyIframe" error.
+      try {
+        const leftover = (DailyIframe as any).getCallInstance?.()
+        if (leftover) {
+          try { await leftover.leave() } catch {}
+          try { leftover.destroy() } catch {}
+        }
+      } catch {}
+
       const callFrame = DailyIframe.createFrame(containerRef.current!, {
         iframeStyle: {
           width: '100%',
@@ -175,7 +188,13 @@ export default function VideoSessionPage() {
       callFrame.on('error', (e: any) => {
         console.error('Daily.co error:', e)
         if (joinTimeout) clearTimeout(joinTimeout)
-        setError(e?.errorMsg || 'Video connection error. Please try refreshing the page.')
+        const msg: string = e?.errorMsg || ''
+        // Detect the camera-in-use class of failures and give a recovery hint.
+        const friendly =
+          /cam|camera|video|in use|busy|notreadable|notallowed/i.test(msg)
+            ? 'Your camera or microphone is locked by another tab or app. Close any other video calls (Zoom, Meet, other browser tabs) and try again, or click Join with camera off.'
+            : msg || 'Video connection error. Please try refreshing the page.'
+        setError(friendly)
         setConnectionState('error')
       })
 

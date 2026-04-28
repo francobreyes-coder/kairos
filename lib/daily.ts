@@ -48,7 +48,11 @@ export async function createVideoRoom(
     // waits for an in-iframe "Join meeting" click; if that's missed the
     // tutor never actually enters the call and presence stays empty.
     enable_prejoin_ui: false,
-    start_video_off: false,
+    // Default camera off on join. If video is forced on and the camera is
+    // locked by another tab/app, Daily errors before connecting and the
+    // user can't enter the call at all. Mic stays on by default so audio
+    // works without an extra click; both are togglable from the controls.
+    start_video_off: true,
     start_audio_off: false,
     max_participants: 2,
   }
