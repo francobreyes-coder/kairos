@@ -117,6 +117,34 @@ export async function createMeetingToken({ roomName, userId, userName, expiresIn
 }
 
 /* ------------------------------------------------------------------ */
+/*  Active room presence                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns the set of Daily.co room names currently containing at least one
+ * participant. Used to surface a Join button to the counterpart when the
+ * tutor is already in a meeting, regardless of the scheduled time window.
+ */
+export async function listActiveRoomNames(): Promise<Set<string>> {
+  const res = await fetch(`${DAILY_API}/presence`, {
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Daily.co presence failed: ${res.status} ${err}`)
+  }
+  const body = (await res.json()) as { data?: Record<string, unknown[]> }
+  const out = new Set<string>()
+  const data = body.data
+  if (data && typeof data === 'object') {
+    for (const [room, participants] of Object.entries(data)) {
+      if (Array.isArray(participants) && participants.length > 0) out.add(room)
+    }
+  }
+  return out
+}
+
+/* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 

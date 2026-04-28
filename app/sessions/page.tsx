@@ -39,6 +39,10 @@ export default function SessionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
   const [cancelling, setCancelling] = useState<string | null>(null)
+  // IDs of sessions whose Daily.co room is currently in use. Polled
+  // separately so the Join button appears as soon as the counterpart
+  // joins, even if the scheduled time window has passed or hasn't started.
+  const [activeIds, setActiveIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -47,6 +51,34 @@ export default function SessionsPage() {
   useEffect(() => {
     if (status !== 'authenticated') return
     fetchSessions()
+  }, [status])
+
+  // Poll the active-rooms endpoint while signed in. 20s is a comfortable
+  // tradeoff between responsiveness for joining and Daily.co API load.
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    let cancelled = false
+
+    async function refreshActive() {
+      try {
+        const res = await fetch('/api/sessions/active-rooms')
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled) setActiveIds(new Set(data.activeIds ?? []))
+      } catch {
+        // Silent — best-effort polling
+      }
+    }
+
+    refreshActive()
+    const interval = setInterval(refreshActive, 20000)
+    const onFocus = () => refreshActive()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+    }
   }, [status])
 
   function fetchSessions() {
@@ -82,11 +114,18 @@ export default function SessionsPage() {
 
   const today = new Date().toISOString().split('T')[0]
 
+  // Treat any session with a live room as "upcoming" so the Join button
+  // is reachable, even if the scheduled date already rolled to "past"
+  // (timezone drift, long-running call, etc.).
   const upcoming = sessions.filter(
-    (s) => s.scheduled_date >= today && s.status === 'confirmed'
+    (s) =>
+      s.status === 'confirmed' &&
+      (s.scheduled_date >= today || activeIds.has(s.id)),
   )
   const past = sessions.filter(
-    (s) => s.scheduled_date < today || s.status !== 'confirmed'
+    (s) =>
+      s.status !== 'confirmed' ||
+      (s.scheduled_date < today && !activeIds.has(s.id)),
   )
 
   const displayed = tab === 'upcoming' ? upcoming : past
@@ -283,15 +322,18 @@ export default function SessionsPage() {
 
                     <div className="flex flex-col items-end gap-2">
                       {statusBadge(s.status)}
-                      {s.status === 'confirmed' && s.scheduled_date >= today && isWithinSessionWindow(s.scheduled_date, s.time_slot) && (
-                        <button
-                          onClick={() => router.push(`/session/${s.id}`)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"
-                        >
-                          <Video className="w-3.5 h-3.5" />
-                          Join Call
-                        </button>
-                      )}
+                      {s.status === 'confirmed' &&
+                        (activeIds.has(s.id) ||
+                          (s.scheduled_date >= today &&
+                            isWithinSessionWindow(s.scheduled_date, s.time_slot))) && (
+                          <button
+                            onClick={() => router.push(`/session/${s.id}`)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                            {activeIds.has(s.id) ? 'Join Call · Live' : 'Join Call'}
+                          </button>
+                        )}
                       {s.status === 'confirmed' && s.scheduled_date >= today && (
                         <button
                           onClick={() => cancelSession(s.id)}
