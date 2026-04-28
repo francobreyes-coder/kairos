@@ -38,30 +38,54 @@ export async function createVideoRoom(
   const expiry = computeRoomExpiry(scheduledDate, timeSlot)
 
   // Properties we want every session room to have. Re-applied to existing
-  // rooms so that older rooms (which were created before enable_prejoin_ui
-  // was added, or with a stale `exp`) get healed on the next join.
+  // rooms so older rooms (created before enable_prejoin_ui was added, or
+  // with a stale `exp`, or with media-on defaults) get healed on the next
+  // join.
   const properties = {
     exp: expiry,
     enable_chat: true,
     enable_knocking: false,
-    // Skip Daily's prejoin device-check screen. With prejoin on, the SDK
-    // waits for an in-iframe "Join meeting" click; if that's missed the
-    // tutor never actually enters the call and presence stays empty.
+    // Skip Daily's prejoin device-check screen.
     enable_prejoin_ui: false,
-    // Default camera off on join. If video is forced on and the camera is
-    // locked by another tab/app, Daily errors before connecting and the
-    // user can't enter the call at all. Mic stays on by default so audio
-    // works without an extra click; both are togglable from the controls.
+    // Acquire NO media at join time. With either of these false, Daily
+    // calls getUserMedia for that track, which can fail with "another
+    // application is using it" if the browser is holding the device from
+    // a prior tab/session — and that error path doesn't always surface
+    // through the SDK's error event. Joining muted bypasses media access
+    // entirely; the user toggles mic/camera from the in-call controls.
     start_video_off: true,
-    start_audio_off: false,
+    start_audio_off: true,
     max_participants: 2,
   }
 
-  const auth = { Authorization: `Bearer ${getApiKey()}`, 'Content-Type': 'application/json' }
+  const headers = { Authorization: `Bearer ${getApiKey()}`, 'Content-Type': 'application/json' }
+  const updateUrl = `${DAILY_API}/rooms/${encodeURIComponent(roomName)}`
+
+  // Try update first — if the room exists this guarantees our latest
+  // config is applied. If it doesn't, fall back to create.
+  const updateRes = await fetch(updateUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ privacy: 'private', properties }),
+  })
+
+  if (updateRes.ok) {
+    return {
+      roomName,
+      roomUrl: `https://${getDomain()}.daily.co/${roomName}`,
+    }
+  }
+
+  if (updateRes.status !== 404) {
+    const err = await updateRes.text()
+    console.error(`Daily.co room update failed: ${updateRes.status} ${err}`)
+    // Fall through to create — sometimes Daily returns non-404 for rooms
+    // it doesn't know about, and creating is harmless if the room is gone.
+  }
 
   const createRes = await fetch(`${DAILY_API}/rooms`, {
     method: 'POST',
-    headers: auth,
+    headers,
     body: JSON.stringify({ name: roomName, privacy: 'private', properties }),
   })
 
@@ -71,21 +95,9 @@ export async function createVideoRoom(
   }
 
   const errText = await createRes.text()
-  // Already exists — update properties so prior rooms pick up our latest
-  // config (disable prejoin, extend expiry, etc.).
+  // Race: another request created the room between our update-404 and
+  // create attempts. Treat as success.
   if (createRes.status === 400 && errText.includes('already exists')) {
-    const updateRes = await fetch(
-      `${DAILY_API}/rooms/${encodeURIComponent(roomName)}`,
-      {
-        method: 'POST',
-        headers: auth,
-        body: JSON.stringify({ properties }),
-      },
-    )
-    if (!updateRes.ok) {
-      const err = await updateRes.text()
-      console.error(`Daily.co room update failed: ${updateRes.status} ${err}`)
-    }
     return {
       roomName,
       roomUrl: `https://${getDomain()}.daily.co/${roomName}`,
@@ -93,6 +105,23 @@ export async function createVideoRoom(
   }
 
   throw new Error(`Daily.co room creation failed: ${createRes.status} ${errText}`)
+}
+
+/**
+ * Fetch a room's current configuration from Daily.co. Returns null if the
+ * room doesn't exist. Used by the debug endpoint to verify our healing
+ * actually applied the latest properties.
+ */
+export async function getVideoRoom(roomName: string): Promise<unknown | null> {
+  const res = await fetch(`${DAILY_API}/rooms/${encodeURIComponent(roomName)}`, {
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+  })
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Daily.co get-room failed: ${res.status} ${err}`)
+  }
+  return await res.json()
 }
 
 /* ------------------------------------------------------------------ */

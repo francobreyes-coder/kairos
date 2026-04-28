@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
-import { listActiveRoomNames } from '@/lib/daily'
+import { listActiveRoomNames, getVideoRoom } from '@/lib/daily'
 
 /**
  * GET /api/sessions/active-rooms
@@ -67,6 +67,21 @@ export async function GET(req: NextRequest) {
     .map((r) => r.id)
 
   if (debug) {
+    // Look up actual room config on Daily for each of the user's rooms,
+    // so we can confirm our healing has applied (e.g. start_video_off).
+    const roomConfigs: Record<string, unknown> = {}
+    for (const r of userSessions) {
+      const name = r.video_room_name as string
+      try {
+        const cfg = await getVideoRoom(name)
+        roomConfigs[name] = cfg
+          ? { exists: true, config: (cfg as { config?: unknown }).config ?? cfg }
+          : { exists: false }
+      } catch (e: any) {
+        roomConfigs[name] = { error: e?.message || String(e) }
+      }
+    }
+
     return NextResponse.json({
       activeIds,
       debug: {
@@ -76,6 +91,7 @@ export async function GET(req: NextRequest) {
         userRoomNames: userSessions.map((r) => r.video_room_name),
         activeRoomsFromDaily: Array.from(active),
         presenceError,
+        roomConfigs,
       },
     })
   }
