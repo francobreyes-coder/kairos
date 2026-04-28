@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import {
-  generateTestQuestions,
-  saveTest,
+  generateTestSections,
+  saveSectionedTest,
   listTests,
   countQuestions,
+  type TestSectionFilters,
 } from '@/lib/tests'
 import { getSubjects, getQuestionTypes } from '@/lib/questions'
 import type { QuestionFilters } from '@/lib/questions'
@@ -58,7 +59,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/tests — generate preview or save a test
+// POST /api/tests — generate preview or save a test.
+//
+//   generate: { action, exam_type, sections: [{ label, subject, ... }] }
+//             → { sections: [{ label, questions: [...] }] }
+//   save:     { action, name, exam_type, sections: [{ label, ..., question_ids: [...] }] }
+//             → { test }
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -69,32 +75,38 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { action } = body
 
-    // Generate a randomized question set (preview, not saved)
     if (action === 'generate') {
-      const { filters } = body
-      if (!filters?.exam_type) {
+      const examType = body.exam_type as 'SAT' | 'ACT'
+      if (!examType) {
         return NextResponse.json({ error: 'exam_type is required' }, { status: 400 })
       }
-      const questions = await generateTestQuestions(filters)
-      return NextResponse.json({ questions, count: questions.length })
+      const sections = (body.sections ?? []) as TestSectionFilters[]
+      if (!Array.isArray(sections) || sections.length === 0) {
+        return NextResponse.json({ error: 'at least one section is required' }, { status: 400 })
+      }
+      const result = await generateTestSections(examType, sections)
+      return NextResponse.json({ sections: result })
     }
 
-    // Save a test
     if (action === 'save') {
-      const { name, exam_type, filters, question_ids } = body
-      if (!name || !exam_type || !question_ids?.length) {
+      const { name, exam_type, sections } = body
+      if (!name || !exam_type || !Array.isArray(sections) || sections.length === 0) {
         return NextResponse.json(
-          { error: 'name, exam_type, and question_ids are required' },
-          { status: 400 }
+          { error: 'name, exam_type, and at least one section are required' },
+          { status: 400 },
         )
       }
-      const test = await saveTest(
-        session.user.email,
-        name,
-        exam_type,
-        filters ?? {},
-        question_ids
+      const totalQs = sections.reduce(
+        (a: number, s: any) => a + (s.question_ids?.length ?? 0),
+        0,
       )
+      if (totalQs === 0) {
+        return NextResponse.json(
+          { error: 'no questions selected — re-generate the preview' },
+          { status: 400 },
+        )
+      }
+      const test = await saveSectionedTest(session.user.email, name, exam_type, sections)
       return NextResponse.json({ test })
     }
 

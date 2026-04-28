@@ -18,6 +18,10 @@ export interface Question {
   tags: string[]
   time_estimate: number | null
   figures: QuestionFigure[]
+  passage_group: string | null
+  passage_ids: string[]
+  question_number: number | null
+  context_lines: number[]
   created_at: string
   updated_at: string
 }
