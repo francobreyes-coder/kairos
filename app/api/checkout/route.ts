@@ -88,11 +88,6 @@ export async function POST(req: NextRequest) {
       resolvedFromUsers = usersByEmail?.[0]?.id ?? null
     }
 
-    console.log('[checkout] resolve tutorId=', tutorId,
-      'apps=', JSON.stringify(appsByUserId),
-      'email=', resolvedEmail,
-      'usersById=', resolvedFromUsers)
-
     if (resolvedFromUsers) {
       resolvedTutorId = resolvedFromUsers
     } else {

@@ -45,13 +45,11 @@ export async function fulfillCheckoutBooking(
         .eq('time_slot', meta.time_slot)
         .eq('status', 'confirmed')
         .single()
-      console.log('[fulfillCheckoutBooking] duplicate, returning existing id=', existing?.id)
       return existing?.id ?? null
     }
-    console.error('[fulfillCheckoutBooking] insert failed:', JSON.stringify(error), 'meta=', JSON.stringify(meta))
+    console.error('Failed to create session after payment:', error)
     return null
   }
-  console.log('[fulfillCheckoutBooking] inserted session id=', inserted.id)
 
   const sessionId = inserted.id
 
