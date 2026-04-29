@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { sendBookingConfirmationEmail } from '@/lib/email'
 import { createVideoRoom } from '@/lib/daily'
+import { getUserCandidateIds } from '@/lib/user-candidates'
 
 // GET /api/sessions — fetch user's sessions (as student or tutor)
 export async function GET() {
@@ -14,11 +15,19 @@ export async function GET() {
   const supabase = getSupabase()
   const userId = session.user.id
 
-  // Fetch sessions where user is student OR tutor
+  // Booking writes tutor_id as the email-resolved users.id, which can
+  // differ from the tutor's current signin id when their identity drifted.
+  // Match against every id that resolves to this user so the row is found.
+  const candidateIds = await getUserCandidateIds({
+    id: userId,
+    email: session.user.email,
+  })
+  const idList = candidateIds.join(',')
+
   const { data: sessions, error } = await supabase
     .from('sessions')
     .select('*')
-    .or(`student_id.eq.${userId},tutor_id.eq.${userId}`)
+    .or(`student_id.in.(${idList}),tutor_id.in.(${idList})`)
     .order('scheduled_date', { ascending: true })
 
   if (error) {
@@ -59,11 +68,12 @@ export async function GET() {
     }
   }
 
+  const candidateSet = new Set(candidateIds)
   const enriched = (sessions ?? []).map((s) => ({
     ...s,
     student_name: nameMap.get(s.student_id) ?? 'Student',
     tutor_name: nameMap.get(s.tutor_id) ?? 'Tutor',
-    is_tutor: s.tutor_id === userId,
+    is_tutor: candidateSet.has(s.tutor_id),
   }))
 
   return NextResponse.json({ sessions: enriched })
@@ -229,7 +239,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   }
 
-  if (existing.student_id !== session.user.id && existing.tutor_id !== session.user.id) {
+  const candidateIds = await getUserCandidateIds({
+    id: session.user.id,
+    email: session.user.email,
+  })
+  const candidateSet = new Set(candidateIds)
+  if (!candidateSet.has(existing.student_id) && !candidateSet.has(existing.tutor_id)) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { listActiveRoomNames, getVideoRoom } from '@/lib/daily'
+import { getUserCandidateIds } from '@/lib/user-candidates'
 
 /**
  * GET /api/sessions/active-rooms
@@ -25,11 +26,17 @@ export async function GET(req: NextRequest) {
   const userId = authSession.user.id
   const supabase = getSupabase()
 
+  const candidateIds = await getUserCandidateIds({
+    id: userId,
+    email: authSession.user.email,
+  })
+  const idList = candidateIds.join(',')
+
   const { data: rows, error } = await supabase
     .from('sessions')
     .select('id, video_room_name, student_id, tutor_id, status')
     .eq('status', 'confirmed')
-    .or(`student_id.eq.${userId},tutor_id.eq.${userId}`)
+    .or(`student_id.in.(${idList}),tutor_id.in.(${idList})`)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

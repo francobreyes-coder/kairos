@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { createMeetingToken, createVideoRoom } from '@/lib/daily'
+import { getUserCandidateIds } from '@/lib/user-candidates'
 
 /**
  * GET /api/video-room?sessionId=<uuid>
@@ -34,8 +35,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   }
 
-  // Access control: only assigned tutor or student
-  if (session.student_id !== userId && session.tutor_id !== userId) {
+  // Access control: only assigned tutor or student. Match against every
+  // id that resolves to this user, since the saved tutor_id may be a
+  // different users.id than the current signin (identity drift).
+  const candidateIds = await getUserCandidateIds({
+    id: userId,
+    email: authSession.user.email,
+  })
+  const candidateSet = new Set(candidateIds)
+  if (!candidateSet.has(session.student_id) && !candidateSet.has(session.tutor_id)) {
     return NextResponse.json({ error: 'Not authorized for this session' }, { status: 403 })
   }
 

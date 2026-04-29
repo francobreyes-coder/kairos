@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
+import { getUserCandidateIds } from '@/lib/user-candidates'
 
 // GET /api/tutor/dashboard — fetch all data needed for the tutor dashboard
 export async function GET() {
@@ -51,8 +52,14 @@ export async function GET() {
     return NextResponse.json({ error: 'Tutor profile not found' }, { status: 404 })
   }
 
-  // Fetch all sessions for this tutor (check both user IDs)
-  const tutorIds = tutorUserId !== userId ? [userId, tutorUserId] : [userId]
+  // Booking writes tutor_id as the email-resolved users.id, which can be a
+  // third value distinct from both the current signin id and the orphan
+  // tutor_profiles.user_id. Combine all of them so the row is found.
+  const candidateIds = await getUserCandidateIds({
+    id: userId,
+    email: session.user.email,
+  })
+  const tutorIds = Array.from(new Set([...candidateIds, tutorUserId]))
   const { data: sessions, error } = await supabase
     .from('sessions')
     .select('*')
