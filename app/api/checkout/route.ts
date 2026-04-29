@@ -98,9 +98,12 @@ export async function POST(req: NextRequest) {
     'activities': 'Activities',
   }
 
-  // Create Stripe Checkout session
+  // Create Stripe Checkout session.
+  // Derive baseUrl from the request so Stripe always redirects back to the
+  // origin the user is actually on — independent of how NEXTAUTH_URL is set
+  // in the deploy environment. Falls back to env only if origin is missing.
   const stripe = getStripe()
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  const baseUrl = req.nextUrl.origin || process.env.NEXTAUTH_URL || 'http://localhost:3000'
 
   const checkoutSession = await stripe.checkout.sessions.create({
     mode: 'payment',
