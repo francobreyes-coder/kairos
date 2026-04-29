@@ -66,21 +66,36 @@ export async function POST(req: NextRequest) {
     .eq('id', tutorId)
     .single()
   if (!tutorUser) {
-    const { data: app } = await supabase
+    // Look across application rows by user_id, then by id-via-email — drop
+    // the status filter since profile_completed is the gating signal in
+    // /find-tutors, and completed profiles can outlive a status flip.
+    const { data: appsByUserId } = await supabase
       .from('tutor_applications')
-      .select('email')
+      .select('email, name, application_status')
       .eq('user_id', tutorId)
-      .eq('application_status', 'approved')
-      .single()
-    if (app?.email) {
-      const { data: byEmail } = await supabase
+
+    let resolvedEmail: string | null = null
+    for (const a of appsByUserId ?? []) {
+      if (a.email) { resolvedEmail = a.email; break }
+    }
+
+    let resolvedFromUsers: string | null = null
+    if (resolvedEmail) {
+      const { data: usersByEmail } = await supabase
         .from('users')
         .select('id')
-        .eq('email', app.email)
-        .single()
-      if (byEmail) resolvedTutorId = byEmail.id
+        .eq('email', resolvedEmail)
+      resolvedFromUsers = usersByEmail?.[0]?.id ?? null
     }
-    if (resolvedTutorId === tutorId) {
+
+    console.log('[checkout] resolve tutorId=', tutorId,
+      'apps=', JSON.stringify(appsByUserId),
+      'email=', resolvedEmail,
+      'usersById=', resolvedFromUsers)
+
+    if (resolvedFromUsers) {
+      resolvedTutorId = resolvedFromUsers
+    } else {
       return NextResponse.json(
         { error: "This tutor isn't available for booking right now" },
         { status: 400 },
