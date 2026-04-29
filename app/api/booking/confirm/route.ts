@@ -10,6 +10,7 @@ import { fulfillCheckoutBooking } from '@/lib/booking-confirm'
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
+    console.error('[booking/confirm] no auth session')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -19,7 +20,17 @@ export async function POST(req: NextRequest) {
   }
 
   const stripe = getStripe()
-  const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId)
+  let checkoutSession
+  try {
+    checkoutSession = await stripe.checkout.sessions.retrieve(sessionId)
+  } catch (e) {
+    console.error('[booking/confirm] stripe retrieve failed:', e)
+    return NextResponse.json({ error: 'Stripe retrieve failed' }, { status: 500 })
+  }
+
+  console.log('[booking/confirm] auth user.id=', session.user.id,
+    'metadata.student_id=', checkoutSession.metadata?.student_id,
+    'payment_status=', checkoutSession.payment_status)
 
   if (checkoutSession.metadata?.student_id !== session.user.id) {
     return NextResponse.json({ error: 'Not your checkout session' }, { status: 403 })
@@ -30,5 +41,6 @@ export async function POST(req: NextRequest) {
   }
 
   const id = await fulfillCheckoutBooking(checkoutSession)
+  console.log('[booking/confirm] fulfillment result sessionId=', id)
   return NextResponse.json({ sessionId: id })
 }
