@@ -54,11 +54,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No price set for this service' }, { status: 400 })
   }
 
+  // tutor_profiles.user_id can drift from users.id when the tutor applied
+  // with one account and later signed in with another (Google vs
+  // credentials). sessions.tutor_id has a FK to users(id), so resolve to a
+  // real users row before booking — otherwise the insert in the webhook /
+  // confirm path fails with 23503 and no session is ever created.
+  let resolvedTutorId = tutorId
+  const { data: tutorUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', tutorId)
+    .single()
+  if (!tutorUser) {
+    const { data: app } = await supabase
+      .from('tutor_applications')
+      .select('email')
+      .eq('user_id', tutorId)
+      .eq('application_status', 'approved')
+      .single()
+    if (app?.email) {
+      const { data: byEmail } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', app.email)
+        .single()
+      if (byEmail) resolvedTutorId = byEmail.id
+    }
+    if (resolvedTutorId === tutorId) {
+      return NextResponse.json(
+        { error: "This tutor isn't available for booking right now" },
+        { status: 400 },
+      )
+    }
+  }
+
+  if (resolvedTutorId === session.user.id) {
+    return NextResponse.json({ error: 'Cannot book yourself' }, { status: 400 })
+  }
+
   // Check for double booking
   const { data: existing } = await supabase
     .from('sessions')
     .select('id')
-    .eq('tutor_id', tutorId)
+    .eq('tutor_id', resolvedTutorId)
     .eq('scheduled_date', scheduledDate)
     .eq('time_slot', timeSlot)
     .eq('status', 'confirmed')
@@ -122,7 +160,7 @@ export async function POST(req: NextRequest) {
     ],
     metadata: {
       student_id: session.user.id,
-      tutor_id: tutorId,
+      tutor_id: resolvedTutorId,
       day_of_week: dayOfWeek,
       time_slot: timeSlot,
       scheduled_date: scheduledDate,
