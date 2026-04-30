@@ -150,6 +150,9 @@ export default function VideoSessionPage() {
         }
       } catch {}
 
+      // Skip getUserMedia entirely — we want the user to land in the call
+      // even if their camera/mic are locked by another app. They can turn
+      // either on from the controls once connected.
       const callFrame = DailyIframe.createFrame(containerRef.current!, {
         iframeStyle: {
           width: '100%',
@@ -159,7 +162,30 @@ export default function VideoSessionPage() {
         },
         showLeaveButton: false,
         showFullscreenButton: true,
-      })
+        userMediaVideoConstraints: false,
+        userMediaAudioConstraints: false,
+        // Belt-and-suspenders: also force the user to start with both off.
+        // Room properties already set this, but the SDK reads its own
+        // input settings independently in some flows.
+        startVideoOff: true,
+        startAudioOff: true,
+      } as any)
+
+      // Verbose lifecycle logging — when join silently stalls, knowing
+      // which event fired (or didn't) is the difference between guessing
+      // and pinpointing the failure.
+      const log = (label: string) =>
+        callFrame.on(label as any, (e: any) => {
+          // eslint-disable-next-line no-console
+          console.log(`[daily] ${label}`, e)
+        })
+      log('loading')
+      log('loaded')
+      log('started-camera')
+      log('camera-error')
+      log('access-state-updated')
+      log('network-connection')
+      log('network-quality-change')
 
       callFrame.on('joined-meeting', () => {
         if (joinTimeout) clearTimeout(joinTimeout)
@@ -186,7 +212,7 @@ export default function VideoSessionPage() {
       })
 
       callFrame.on('error', (e: any) => {
-        console.error('Daily.co error:', e)
+        console.error('[daily] error', e)
         if (joinTimeout) clearTimeout(joinTimeout)
         const msg: string = e?.errorMsg || ''
         // Detect the camera-in-use class of failures and give a recovery hint.
