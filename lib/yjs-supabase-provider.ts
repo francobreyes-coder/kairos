@@ -102,25 +102,33 @@ export class SupabaseYjsProvider {
   }
 
   private handleMessage(msg: Outgoing) {
+    if (this.destroyed) return
     if (msg.from === this.clientId) return
-    if (msg.type === 'update') {
-      Y.applyUpdate(this.doc, base64ToBytes(msg.update), this)
-      return
-    }
-    if (msg.type === 'sync-request') {
-      // Reply with our full state so the peer catches up.
-      const state = Y.encodeStateAsUpdate(this.doc)
-      this.send({
-        type: 'sync-state',
-        from: this.clientId,
-        to: msg.from,
-        state: bytesToBase64(state),
-      })
-      return
-    }
-    if (msg.type === 'sync-state' && msg.to === this.clientId) {
-      Y.applyUpdate(this.doc, base64ToBytes(msg.state), this)
-      return
+    try {
+      if (msg.type === 'update') {
+        Y.applyUpdate(this.doc, base64ToBytes(msg.update), this)
+        return
+      }
+      if (msg.type === 'sync-request') {
+        // Reply with our full state so the peer catches up.
+        const state = Y.encodeStateAsUpdate(this.doc)
+        this.send({
+          type: 'sync-state',
+          from: this.clientId,
+          to: msg.from,
+          state: bytesToBase64(state),
+        })
+        return
+      }
+      if (msg.type === 'sync-state' && msg.to === this.clientId) {
+        Y.applyUpdate(this.doc, base64ToBytes(msg.state), this)
+        return
+      }
+    } catch (e) {
+      // A bad update from a peer (older client, partial buffer) used to
+      // crash the page via Yjs's struct decoder. Swallow + log; the
+      // doc stays intact and the next valid sync will reconcile.
+      console.error('Yjs provider: failed to handle peer message', msg.type, e)
     }
   }
 

@@ -51,8 +51,14 @@ export function CollaborativeEditor({ sessionId }: Props) {
         if (cancelled) return
 
         if (data.yjsState) {
-          const bin = Uint8Array.from(atob(data.yjsState), (c) => c.charCodeAt(0))
-          Y.applyUpdate(ydoc, bin)
+          try {
+            const bin = Uint8Array.from(atob(data.yjsState), (c) => c.charCodeAt(0))
+            Y.applyUpdate(ydoc, bin)
+          } catch (e) {
+            // A malformed snapshot shouldn't brick the editor — start
+            // empty and let the user re-type. Logged so we notice.
+            console.error('Failed to apply persisted Yjs state:', e)
+          }
         }
         setReady(true)
       } catch (e: any) {

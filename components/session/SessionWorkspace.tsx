@@ -104,22 +104,34 @@ export function SessionWorkspace({ sessionId, videoSlot }: Props) {
         </div>
       </div>
 
-      {/* Right column: when a doc is open, show viewer + editor stacked;
-          otherwise editor takes full height. */}
-      {openFile ? (
-        <div className="grid grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-4 min-h-0">
-          <div className="rounded-2xl border border-border overflow-hidden">
+      {/* Right column. The editor must stay mounted across openFile
+          transitions — remounting it tears down the Yjs doc while the
+          provider's broadcast channel is still receiving updates, and
+          applying a stale update to a fresh doc throws inside Yjs's
+          struct decoder. Stable keys keep React from reconciling the
+          editor away when the viewer slot appears. */}
+      <div
+        className={`grid gap-4 min-h-0 ${
+          openFile
+            ? 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]'
+            : 'grid-rows-1'
+        }`}
+      >
+        {openFile && (
+          <div
+            key="viewer"
+            className="rounded-2xl border border-border overflow-hidden"
+          >
             <DocumentViewer file={openFile} onClose={() => setOpenFile(null)} />
           </div>
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <CollaborativeEditor sessionId={sessionId} />
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden min-h-0">
+        )}
+        <div
+          key="editor"
+          className="rounded-2xl border border-border bg-card overflow-hidden"
+        >
           <CollaborativeEditor sessionId={sessionId} />
         </div>
-      )}
+      </div>
     </div>
   )
 }
