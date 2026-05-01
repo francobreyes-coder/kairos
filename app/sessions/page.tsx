@@ -14,6 +14,7 @@ import {
   XCircle,
   AlertCircle,
   Video,
+  FileText,
 } from 'lucide-react'
 
 interface Session {
@@ -346,6 +347,15 @@ export default function SessionsPage() {
                             <X className="w-3 h-3" />
                           )}
                           Cancel
+                        </button>
+                      )}
+                      {tab === 'past' && s.status !== 'cancelled' && (
+                        <button
+                          onClick={() => router.push(`/session/${s.id}/notes`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+                        >
+                          <FileText className="w-3 h-3" />
+                          View notes
                         </button>
                       )}
                     </div>
