@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FileText, ImageIcon, Trash2, Eye } from 'lucide-react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { CollaborativeEditor } from './CollaborativeEditor'
 import { DocumentUploader } from './DocumentUploader'
 import { DocumentViewer } from './DocumentViewer'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 import type { UploadedFile } from './types'
 
 type Props = {
@@ -14,9 +16,17 @@ type Props = {
   videoSlot: React.ReactNode
 }
 
+// Cross-peer file events. Local state alone wouldn't propagate, so each
+// client also publishes upload/delete to a shared broadcast channel and
+// mirrors what it receives.
+type FilesBroadcast =
+  | { type: 'upload'; file: UploadedFile }
+  | { type: 'delete'; id: string }
+
 export function SessionWorkspace({ sessionId, videoSlot }: Props) {
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [openFile, setOpenFile] = useState<UploadedFile | null>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
   useEffect(() => {
     fetch(`/api/session-uploads?sessionId=${sessionId}`)
@@ -25,9 +35,43 @@ export function SessionWorkspace({ sessionId, videoSlot }: Props) {
       .catch(() => {})
   }, [sessionId])
 
+  useEffect(() => {
+    const supabase = getBrowserSupabase()
+    const channel = supabase.channel(`session-files:${sessionId}`, {
+      config: { broadcast: { self: false } },
+    })
+
+    channel.on('broadcast', { event: 'files' }, (payload) => {
+      const msg = payload.payload as FilesBroadcast
+      if (msg.type === 'upload') {
+        setFiles((prev) =>
+          prev.some((f) => f.id === msg.file.id) ? prev : [...prev, msg.file],
+        )
+        // Auto-open on the receiving peer — the uploader's intent is to
+        // share, so pulling it up matches what tutoring sessions expect.
+        setOpenFile(msg.file)
+      } else if (msg.type === 'delete') {
+        setFiles((prev) => prev.filter((f) => f.id !== msg.id))
+        setOpenFile((prev) => (prev?.id === msg.id ? null : prev))
+      }
+    })
+
+    channel.subscribe()
+    channelRef.current = channel
+    return () => {
+      supabase.removeChannel(channel)
+      channelRef.current = null
+    }
+  }, [sessionId])
+
   function handleUploaded(file: UploadedFile) {
     setFiles((prev) => [...prev, file])
     setOpenFile(file)
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'files',
+      payload: { type: 'upload', file } satisfies FilesBroadcast,
+    })
   }
 
   async function handleDelete(file: UploadedFile) {
@@ -39,6 +83,11 @@ export function SessionWorkspace({ sessionId, videoSlot }: Props) {
     })
     setFiles((prev) => prev.filter((f) => f.id !== file.id))
     if (openFile?.id === file.id) setOpenFile(null)
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'files',
+      payload: { type: 'delete', id: file.id } satisfies FilesBroadcast,
+    })
   }
 
   return (
