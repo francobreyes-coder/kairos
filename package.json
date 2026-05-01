@@ -6,12 +6,20 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "questions:extract": "npx tsx scripts/pdf-to-questions-with-figures.mts",
+    "questions:review": "node scripts/figure-review-server.mjs",
+    "questions:import": "node scripts/import-questions.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",
     "@daily-co/daily-js": "^0.89.1",
     "@supabase/supabase-js": "^2.103.3",
+    "@tiptap/extension-collaboration": "^2.10.4",
+    "@tiptap/extension-placeholder": "^2.10.4",
+    "@tiptap/pm": "^2.10.4",
+    "@tiptap/react": "^2.10.4",
+    "@tiptap/starter-kit": "^2.10.4",
     "@vercel/analytics": "1.6.1",
     "lucide-react": "^0.564.0",
     "next": "^16.2.3",
@@ -20,7 +28,8 @@
     "react-dom": "^19",
     "react-easy-crop": "^5.5.7",
     "resend": "^6.12.2",
-    "stripe": "^22.0.2"
+    "stripe": "^22.0.2",
+    "yjs": "^13.6.20"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.0",

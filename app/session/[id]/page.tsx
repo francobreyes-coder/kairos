@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Header } from '@/components/landing/header'
+import { SessionWorkspace } from '@/components/session/SessionWorkspace'
 import {
   Loader2,
   Video,
@@ -16,7 +17,6 @@ import {
   Clock,
   User,
   Wifi,
-  WifiOff,
 } from 'lucide-react'
 
 interface SessionInfo {
@@ -397,13 +397,92 @@ export default function VideoSessionPage() {
 
   const canJoin = isWithinSessionWindow()
 
+  // Video panel — passed as a slot into SessionWorkspace so it lives in the
+  // top-left of the split layout. The Daily.co iframe attaches to
+  // `containerRef`; the join overlay covers it until the call starts; the
+  // mic/cam/leave controls float over the bottom edge once joined.
+  const videoSlot = (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+
+      {(connectionState === 'idle' || connectionState === 'loading') && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-10 p-4 text-center">
+          {connectionState === 'loading' ? (
+            <>
+              <Loader2 className="w-8 h-8 text-accent animate-spin mb-3" />
+              <p className="text-white text-sm font-medium">Preparing video room…</p>
+            </>
+          ) : (
+            <>
+              <div className="w-14 h-14 rounded-full bg-accent/20 flex items-center justify-center mb-4">
+                <Video className="w-7 h-7 text-accent" />
+              </div>
+              <h2 className="text-lg font-bold text-white mb-1">Ready to join?</h2>
+              <p className="text-gray-400 text-xs mb-5 max-w-xs">
+                {canJoin
+                  ? `Session with ${sessionInfo!.is_tutor ? sessionInfo!.student_name : sessionInfo!.tutor_name}`
+                  : 'Joinable 10 minutes before start time.'}
+              </p>
+              {canJoin ? (
+                <button
+                  onClick={joinCall}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/90 transition-colors"
+                >
+                  <Video className="w-4 h-4" />
+                  Join Session
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push('/sessions')}
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-gray-700 text-white text-xs font-medium hover:bg-gray-600 transition-colors"
+                >
+                  Back to Sessions
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {connectionState === 'joined' && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-2 py-1.5 z-10">
+          <button
+            onClick={toggleCamera}
+            className={`p-2 rounded-full transition-colors ${
+              cameraOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500/80 text-white hover:bg-red-600'
+            }`}
+            title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {cameraOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={toggleMic}
+            className={`p-2 rounded-full transition-colors ${
+              micOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500/80 text-white hover:bg-red-600'
+            }`}
+            title={micOn ? 'Mute microphone' : 'Unmute microphone'}
+          >
+            {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={leaveCall}
+            className="p-2 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors"
+            title="Leave call"
+          >
+            <PhoneOff className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <>
       <Header />
       <main className="min-h-screen pt-24 pb-8 px-4 sm:px-6">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-[1400px]">
           {/* Session info bar */}
-          <div className="rounded-2xl border border-border bg-card p-4 mb-4">
+          <div className="rounded-2xl border border-border bg-card p-3 mb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -426,7 +505,6 @@ export default function VideoSessionPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Connection status */}
                 {connectionState === 'joined' && (
                   <div className="flex items-center gap-1.5 text-xs text-green-600">
                     <Wifi className="w-3.5 h-3.5" />
@@ -434,8 +512,6 @@ export default function VideoSessionPage() {
                     {participantCount > 0 && ` (${participantCount})`}
                   </div>
                 )}
-
-                {/* Session timer */}
                 {timeRemaining && (
                   <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
                     timeRemaining === 'Session ended'
@@ -451,99 +527,8 @@ export default function VideoSessionPage() {
             </div>
           </div>
 
-          {/* Video area */}
-          <div className="relative rounded-2xl border border-border bg-black overflow-hidden" style={{ height: 'calc(100vh - 220px)', minHeight: '400px' }}>
-            {/* Daily.co iframe container */}
-            <div ref={containerRef} className="w-full h-full" />
-
-            {/* Pre-join overlay. We deliberately drop it for the 'joining'
-                state so the Daily iframe (which may show a brief device
-                check or permission prompt) is interactive — covering it
-                with a spinner is what made earlier joins hang forever. */}
-            {(connectionState === 'idle' || connectionState === 'loading') && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-10">
-                {connectionState === 'loading' ? (
-                  <>
-                    <Loader2 className="w-10 h-10 text-accent animate-spin mb-4" />
-                    <p className="text-white text-lg font-medium">
-                      Preparing video room...
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center mb-6">
-                      <Video className="w-10 h-10 text-accent" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">Ready to join?</h2>
-                    <p className="text-gray-400 mb-8 text-center max-w-md">
-                      {canJoin
-                        ? `Join your session with ${sessionInfo!.is_tutor ? sessionInfo!.student_name : sessionInfo!.tutor_name}`
-                        : 'This session is not within the joinable window (10 minutes before start time).'
-                      }
-                    </p>
-                    {canJoin ? (
-                      <button
-                        onClick={joinCall}
-                        className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-accent text-accent-foreground text-base font-semibold hover:bg-accent/90 transition-colors"
-                      >
-                        <Video className="w-5 h-5" />
-                        Join Session
-                      </button>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-amber-400 text-sm mb-4">
-                          You can join 10 minutes before the scheduled time.
-                        </p>
-                        <button
-                          onClick={() => router.push('/sessions')}
-                          className="inline-flex items-center px-5 py-2.5 rounded-lg bg-gray-700 text-white text-sm font-medium hover:bg-gray-600 transition-colors"
-                        >
-                          Back to Sessions
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Controls bar (only visible when in call) */}
-          {connectionState === 'joined' && (
-            <div className="flex items-center justify-center gap-3 mt-4">
-              <button
-                onClick={toggleCamera}
-                className={`p-3 rounded-full transition-colors ${
-                  cameraOn
-                    ? 'bg-muted text-foreground hover:bg-muted/80'
-                    : 'bg-red-100 text-red-600 hover:bg-red-200'
-                }`}
-                title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
-              >
-                {cameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-              </button>
-
-              <button
-                onClick={toggleMic}
-                className={`p-3 rounded-full transition-colors ${
-                  micOn
-                    ? 'bg-muted text-foreground hover:bg-muted/80'
-                    : 'bg-red-100 text-red-600 hover:bg-red-200'
-                }`}
-                title={micOn ? 'Mute microphone' : 'Unmute microphone'}
-              >
-                {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-              </button>
-
-              <button
-                onClick={leaveCall}
-                className="p-3 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors"
-                title="Leave call"
-              >
-                <PhoneOff className="w-5 h-5" />
-              </button>
-            </div>
-          )}
+          {/* Collaborative workspace: video + files + shared notes */}
+          <SessionWorkspace sessionId={sessionId} videoSlot={videoSlot} />
         </div>
       </main>
     </>
