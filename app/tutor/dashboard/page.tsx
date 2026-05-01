@@ -233,7 +233,7 @@ function SessionRow({
             {cancelling === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Cancel'}
           </button>
         )}
-        {isPast && s.status !== 'cancelled' && (
+        {isPast && (
           <a
             href={`/session/${s.id}/notes`}
             className="inline-flex items-center gap-1 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 px-2.5 py-1 rounded-lg transition-colors"

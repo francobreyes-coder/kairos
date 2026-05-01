@@ -349,7 +349,7 @@ export default function SessionsPage() {
                           Cancel
                         </button>
                       )}
-                      {tab === 'past' && s.status !== 'cancelled' && (
+                      {tab === 'past' && (
                         <button
                           onClick={() => router.push(`/session/${s.id}/notes`)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors"

@@ -171,7 +171,28 @@ function EditorBody({
     ydoc.on('update', update)
     return () => {
       ydoc.off('update', update)
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+        // Flush the pending edit before we unmount. Without this, typing
+        // "hello" and clicking End Call inside the 1.5s debounce window
+        // dropped the write and the notes came back empty later.
+        // keepalive lets the request outlive the page navigation.
+        try {
+          const state = Y.encodeStateAsUpdate(ydoc)
+          let s = ''
+          for (let i = 0; i < state.length; i++) s += String.fromCharCode(state[i])
+          const yjsState = btoa(s)
+          fetch(`/api/session-documents/${sessionId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yjsState, content: editor!.getJSON() }),
+            keepalive: true,
+          }).catch(() => {})
+        } catch (e) {
+          console.error('Failed to flush notes on unmount:', e)
+        }
+      }
     }
   }, [editor, sessionId, ydoc])
 
