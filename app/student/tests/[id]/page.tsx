@@ -103,7 +103,10 @@ interface AdaptedSection {
 
 interface AdaptedPassage {
   citation: string
+  // Highlightable body HTML (text only). Figures are rendered separately
+  // so the Selection-API highlighter doesn't have to deal with images.
   body: string
+  figures: Figure[]
 }
 
 interface AdaptedTest {
@@ -152,26 +155,60 @@ function stripEmbeddedChoices(text: string): string {
   return text
 }
 
-// Mirror tutor view: question_text may carry a "Passage:\n[Title]\n\n…\n\nQuestion N: stem"
-// envelope. We want only the stem for the question panel.
-function extractStem(text: string): string {
+// Render the question_text, mirroring the tutor view's behavior. We only
+// strip the legacy "Passage:\n[Title]\n\n…\n\nQuestion N: stem" envelope
+// when the question already has a first-class passage in the side panel
+// — otherwise that passage isn't shown anywhere else. Splitting on the
+// last \n\n (which an earlier version did) eats the problem setup of any
+// two-paragraph stem ("Solve …\n\nWhich value …" or the SAT vocab blank
+// pattern), so we don't do that.
+function cleanQuestionText(text: string, hasFirstClassPassage: boolean): string {
   if (!text) return ''
-  let body = text.startsWith('Passage:')
-    ? text.slice('Passage:'.length).replace(/^\s+/, '')
-    : text
-  const lines = body.split('\n')
-  const firstLine = lines[0]?.trim() ?? ''
-  if (/^\[.+\]$/.test(firstLine)) {
-    body = lines.slice(1).join('\n').replace(/^\s+/, '')
+  let body = text
+  if (hasFirstClassPassage && body.startsWith('Passage:')) {
+    body = body.slice('Passage:'.length).replace(/^\s+/, '')
+    const lines = body.split('\n')
+    const firstLine = lines[0]?.trim() ?? ''
+    if (/^\[.+\]$/.test(firstLine)) {
+      body = lines.slice(1).join('\n').replace(/^\s+/, '')
+    }
+    const qMatch = body.match(/(?:^|\n\s*\n)(Question\s+\d+\s*[:.]|\d+\.\s+(?=[A-Z]))/i)
+    if (qMatch && qMatch.index !== undefined) {
+      const splitAt = qMatch.index + (qMatch[0].length - qMatch[1].length)
+      body = body.slice(splitAt).replace(/^\s*\n*/, '').trim()
+    }
   }
-  const qMatch = body.match(/(?:^|\n\s*\n)(Question\s+\d+\s*[:.]|\d+\.\s+(?=[A-Z]))/i)
-  if (qMatch && qMatch.index !== undefined) {
-    const splitAt = qMatch.index + (qMatch[0].length - qMatch[1].length)
-    return stripEmbeddedChoices(body.slice(splitAt).replace(/^\s*\n*/, '').trim())
+  return stripEmbeddedChoices(body)
+}
+
+// Permissive correctness check. SAT student-produced response (SPR) items
+// accept several forms of the same value — "0.5", ".5", and "1/2" all match
+// — so we compare numerically when both sides parse, and fall back to
+// trimmed string equality otherwise (which is what choice-letter answers
+// rely on).
+function parseNumeric(s: string): number | null {
+  const trimmed = s.trim()
+  const fracMatch = trimmed.match(/^(-?\d*\.?\d+)\s*\/\s*(-?\d*\.?\d+)$/)
+  if (fracMatch) {
+    const num = parseFloat(fracMatch[1])
+    const den = parseFloat(fracMatch[2])
+    if (den === 0 || !isFinite(num) || !isFinite(den)) return null
+    return num / den
   }
-  const lastBoundary = body.lastIndexOf('\n\n')
-  if (lastBoundary < 0) return stripEmbeddedChoices(body.trim())
-  return stripEmbeddedChoices(body.slice(lastBoundary + 2).trim())
+  const n = parseFloat(trimmed)
+  return isFinite(n) && /^-?\d*\.?\d+$/.test(trimmed) ? n : null
+}
+
+function answerMatches(given: string | undefined, expected: string): boolean {
+  if (given == null) return false
+  const a = given.trim()
+  const b = expected.trim()
+  if (a === '' || b === '') return false
+  if (a === b) return true
+  const na = parseNumeric(a)
+  const nb = parseNumeric(b)
+  if (na != null && nb != null && Math.abs(na - nb) < 1e-9) return true
+  return false
 }
 
 // `^N` markers in a passage body are line-reference anchors. The tutor
@@ -232,7 +269,7 @@ function adaptTest(raw: RawTest): AdaptedTest {
           ...q,
           passageIds: ids,
           passageKey: passageKeyFor(ids),
-          cleanStem: extractStem(q.question_text),
+          cleanStem: cleanQuestionText(q.question_text, ids.length > 0),
         }
       }),
     }
@@ -240,6 +277,9 @@ function adaptTest(raw: RawTest): AdaptedTest {
 
   // Combine paired passages under a single composite key so the panel can
   // render Passage A and Passage B together without a re-key on toggle.
+  // Figures (graphs, tables, charts) attached to passages are kept on a
+  // sibling list so the highlighter doesn't have to deal with images
+  // inside its contenteditable region.
   const passages: Record<string, AdaptedPassage> = {}
   const passageById = new Map(raw.passages.map((p) => [p.id, p]))
   const seenKeys = new Set<string>()
@@ -249,6 +289,8 @@ function adaptTest(raw: RawTest): AdaptedTest {
       seenKeys.add(q.passageKey)
       const ids = [...q.passageIds].sort()
       const parts: string[] = []
+      const figures: Figure[] = []
+      const seenCaptions = new Set<string>()
       let citationLabel = ''
       ids.forEach((pid) => {
         const p = passageById.get(pid)
@@ -263,10 +305,18 @@ function adaptTest(raw: RawTest): AdaptedTest {
         const cite = `Passage${kindPart}${titlePart}`
         if (!citationLabel) citationLabel = cite
         parts.push(passageBodyToHtml(cite, p.body))
+        for (const f of p.figures ?? []) {
+          if (!f.url) continue
+          const key = (f.caption ?? '').trim().toLowerCase()
+          if (key && seenCaptions.has(key)) continue
+          if (key) seenCaptions.add(key)
+          figures.push(f)
+        }
       })
       passages[q.passageKey] = {
         citation: citationLabel,
         body: parts.join(''),
+        figures,
       }
     }
   }
@@ -283,8 +333,8 @@ function countCorrect(
   section: AdaptedSection,
   sectionAnswers: Record<string, string>,
 ): number {
-  return section.questions.filter(
-    (q) => sectionAnswers[q.id] === q.correct_answer,
+  return section.questions.filter((q) =>
+    answerMatches(sectionAnswers[q.id], q.correct_answer),
   ).length
 }
 
@@ -409,10 +459,14 @@ function TestApp({ raw }: { raw: RawTest }) {
   const handleAnswer = (letter: string) => {
     const sid = section.id
     const qid = section.questions[qIdx].id
-    setAnswers((prev) => ({
-      ...prev,
-      [sid]: { ...(prev[sid] || {}), [qid]: letter },
-    }))
+    setAnswers((prev) => {
+      const sCur = { ...(prev[sid] || {}) }
+      // For fill-in-the-blank we get a free-form string; an empty input
+      // means "no answer", so clear the entry to keep nav / scoring honest.
+      if (letter.trim() === '') delete sCur[qid]
+      else sCur[qid] = letter
+      return { ...prev, [sid]: sCur }
+    })
   }
 
   const handleEliminate = (letter: string) => {
@@ -975,8 +1029,9 @@ function ReviewScreen({
       >
         {section.questions.map((q, i) => {
           const given = sectionAnswers[q.id]
-          const isCorrect = given === q.correct_answer
-          const isSkipped = !given
+          const isCorrect = answerMatches(given, q.correct_answer)
+          const isSkipped = !given || given.trim() === ''
+          const isFillIn = !q.answer_choices || q.answer_choices.length === 0
           return (
             <div
               key={q.id}
@@ -1039,6 +1094,60 @@ function ReviewScreen({
                   </div>
                 </div>
               </div>
+              {isFillIn ? (
+                <div style={{ paddingLeft: 36, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 12px',
+                      borderRadius: 'var(--kt-r-sm)',
+                      background: isSkipped
+                        ? 'transparent'
+                        : isCorrect
+                          ? '#E6F9F0'
+                          : '#FDEDEC',
+                      border: `1.5px solid ${
+                        isSkipped
+                          ? 'var(--kt-border)'
+                          : isCorrect
+                            ? '#2FA46A'
+                            : '#C9453B'
+                      }`,
+                      fontSize: 13,
+                      color: isSkipped
+                        ? 'var(--kt-fg-3)'
+                        : isCorrect
+                          ? '#1A7A50'
+                          : '#9E3530',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, minWidth: 78 }}>
+                      Your answer
+                    </span>
+                    <span>{isSkipped ? '— (skipped)' : given}</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 12px',
+                      borderRadius: 'var(--kt-r-sm)',
+                      background: '#E6F9F0',
+                      border: '1.5px solid #2FA46A',
+                      fontSize: 13,
+                      color: '#1A7A50',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, minWidth: 78 }}>
+                      Correct
+                    </span>
+                    <span>{q.correct_answer}</span>
+                  </div>
+                </div>
+              ) : (
               <div
                 style={{
                   display: 'flex',
@@ -1109,6 +1218,7 @@ function ReviewScreen({
                   )
                 })}
               </div>
+              )}
               {q.explanation && (
                 <div
                   style={{
@@ -1271,6 +1381,7 @@ function TestScreen({
               passageKey={passageKey}
               passageHtml={passageHtml}
               fallbackHtml={passage.body}
+              figures={passage.figures}
               onHtmlChange={onPassageHtml}
             />
             <div className="kt-question-panel">
@@ -1353,11 +1464,13 @@ function PassagePanel({
   passageKey,
   passageHtml,
   fallbackHtml,
+  figures,
   onHtmlChange,
 }: {
   passageKey: string
   passageHtml: string
   fallbackHtml: string
+  figures: Figure[]
   onHtmlChange: (key: string, html: string) => void
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -1431,6 +1544,23 @@ function PassagePanel({
         onMouseUp={handleMouseUp}
         dangerouslySetInnerHTML={{ __html: passageHtml }}
       />
+      {figures.length > 0 && (
+        <div className="kt-passage-figures">
+          {figures.map((fig, fi) =>
+            fig.url ? (
+              <figure key={fi} className="kt-figure">
+                <img
+                  src={fig.url}
+                  alt={fig.caption || `Figure ${fi + 1}`}
+                />
+                {fig.caption && (
+                  <figcaption>{fig.caption}</figcaption>
+                )}
+              </figure>
+            ) : null,
+          )}
+        </div>
+      )}
       {tooltip && (
         <div
           className="kt-hl-tooltip"
@@ -1482,11 +1612,12 @@ function QuestionPanel({
   onAnswer: (letter: string) => void
   onEliminate: (letter: string) => void
 }) {
+  const isFillIn = !question.answer_choices || question.answer_choices.length === 0
   return (
     <div style={{ maxWidth: 680 }}>
       <div className="kt-q-num-row">
         <div className="kt-q-num-badge">{sectionQIdx + 1}</div>
-        {elimMode && (
+        {elimMode && !isFillIn && (
           <div
             style={{
               display: 'flex',
@@ -1547,35 +1678,56 @@ function QuestionPanel({
           )}
         </div>
       )}
-      <div className="kt-choices">
-        {question.answer_choices.map((c) => {
-          const isSelected = answer === c.label
-          const isElim = eliminated.includes(c.label)
-          const cls = [
-            'kt-choice-btn',
-            isSelected ? 'kt-selected' : '',
-            isElim ? 'kt-eliminated' : '',
-            elimMode && !isSelected ? 'kt-elim-hover' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-          return (
-            <button
-              key={c.label}
-              className={cls}
-              onClick={() => {
-                if (elimMode) onEliminate(c.label)
-                else onAnswer(c.label)
-              }}
-            >
-              <span className="kt-choice-letter">
-                {isElim ? '✕' : c.label}
-              </span>
-              <span className="kt-choice-text">{c.text}</span>
-            </button>
-          )
-        })}
-      </div>
+      {isFillIn ? (
+        <div className="kt-fillin">
+          <label className="kt-fillin-label" htmlFor={`spr-${question.id}`}>
+            Enter your answer
+          </label>
+          <input
+            id={`spr-${question.id}`}
+            className="kt-fillin-input"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="e.g. 0.5  or  1/2"
+            value={answer ?? ''}
+            onChange={(e) => onAnswer(e.target.value)}
+          />
+          <div className="kt-fillin-hint">
+            Decimals, fractions, and negative values are accepted.
+          </div>
+        </div>
+      ) : (
+        <div className="kt-choices">
+          {question.answer_choices.map((c) => {
+            const isSelected = answer === c.label
+            const isElim = eliminated.includes(c.label)
+            const cls = [
+              'kt-choice-btn',
+              isSelected ? 'kt-selected' : '',
+              isElim ? 'kt-eliminated' : '',
+              elimMode && !isSelected ? 'kt-elim-hover' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')
+            return (
+              <button
+                key={c.label}
+                className={cls}
+                onClick={() => {
+                  if (elimMode) onEliminate(c.label)
+                  else onAnswer(c.label)
+                }}
+              >
+                <span className="kt-choice-letter">
+                  {isElim ? '✕' : c.label}
+                </span>
+                <span className="kt-choice-text">{c.text}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -2050,6 +2202,30 @@ function KtStyles() {
   margin: 0 1px;
   vertical-align: super;
 }
+.kt-passage-figures {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kt-figure {
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-r-md);
+  background: white;
+  padding: 12px;
+}
+.kt-figure img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  border-radius: 8px;
+}
+.kt-figure figcaption {
+  font-size: 12px;
+  color: var(--kt-fg-3);
+  margin-top: 8px;
+  text-align: center;
+}
 
 /* Question */
 .kt-q-num-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
@@ -2112,6 +2288,37 @@ function KtStyles() {
 .kt-selected .kt-choice-letter { background: var(--kt-purple-500); color: white; }
 .kt-eliminated .kt-choice-letter { background: var(--kt-surface-2); color: var(--kt-fg-3); position: relative; }
 .kt-choice-text { flex: 1; }
+
+/* Fill-in-the-blank (SAT student-produced response) */
+.kt-fillin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+.kt-fillin-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--kt-fg-3);
+}
+.kt-fillin-input {
+  width: 100%;
+  padding: 14px 18px;
+  border: 1.5px solid var(--kt-border);
+  border-radius: var(--kt-r-md);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--kt-fg-1);
+  background: white;
+  transition: all 120ms;
+  outline: none;
+}
+.kt-fillin-input::placeholder { color: var(--kt-fg-3); font-weight: 500; }
+.kt-fillin-input:focus { border-color: var(--kt-purple-500); box-shadow: 0 0 0 4px rgba(122,98,234,.18); }
+.kt-fillin-hint { font-size: 12px; color: var(--kt-fg-3); }
 
 /* Footer */
 .kt-footer {
