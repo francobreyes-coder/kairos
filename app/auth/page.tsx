@@ -1,10 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { signIn, getSession, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+
+async function landingForCurrentUser(): Promise<string> {
+  // Refresh the session so the role from JWT is current, then route students
+  // to their dashboard. Other roles (tutors, college) keep going to /home.
+  const sess = await getSession()
+  const role = (sess?.user as { role?: string } | undefined)?.role
+  return role === 'high_school' ? '/student/dashboard' : '/home'
+}
 
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
@@ -27,7 +35,9 @@ export default function AuthPage() {
   const router = useRouter()
 
   useEffect(() => {
-    if (session && !submitting) router.push('/home')
+    if (session && !submitting) {
+      landingForCurrentUser().then((url) => router.push(url))
+    }
   }, [session, router, submitting])
 
   if (status === 'loading' || session) {
@@ -63,6 +73,7 @@ export default function AuthPage() {
       setError('An account with this email may already exist. Try signing in.')
       setSubmitting(false)
     } else {
+      // High-schoolers finish onboarding first, then land on the dashboard.
       router.push(role === 'high_school' ? '/student/onboarding' : '/home')
     }
   }
@@ -84,7 +95,7 @@ export default function AuthPage() {
       setMode('create')
       setSubmitting(false)
     } else {
-      router.push('/home')
+      router.push(await landingForCurrentUser())
     }
   }
 
@@ -98,7 +109,9 @@ export default function AuthPage() {
     sessionStorage.removeItem('kairos_email_optin')
     sessionStorage.removeItem('kairos_signup')
     sessionStorage.removeItem('kairos_role')
-    signIn('google', { callbackUrl: '/home' })
+    // Land on the role-router so high-schoolers get the dashboard and
+    // tutors/college users still get the marketing home.
+    signIn('google', { callbackUrl: '/post-login' })
   }
 
   return (
