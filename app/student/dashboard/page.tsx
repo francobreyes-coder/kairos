@@ -3,15 +3,14 @@
 import * as React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
+import { StudentSidebar, type SidebarItemId } from '@/components/student-sidebar'
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Design tokens (scoped to dashboard via :root override on the wrapper)
 // ═══════════════════════════════════════════════════════════════════════
 const DASH_VARS: CSSProperties = {
-  // Purples
   ['--p900' as string]: '#2A1B6B',
   ['--p700' as string]: '#4B38B3',
   ['--p600' as string]: '#6C52E0',
@@ -21,7 +20,6 @@ const DASH_VARS: CSSProperties = {
   ['--p200' as string]: '#D9D0FA',
   ['--p100' as string]: '#ECE7FC',
   ['--p050' as string]: '#F6F3FE',
-  // Neutrals
   ['--ink' as string]: '#1C1B1F',
   ['--ink2' as string]: '#2E2C34',
   ['--graphite' as string]: '#5A5862',
@@ -30,10 +28,8 @@ const DASH_VARS: CSSProperties = {
   ['--s2' as string]: '#F1EFE9',
   ['--s1' as string]: '#F7F5F0',
   ['--s0' as string]: '#FFFFFF',
-  // Status
   ['--amber' as string]: '#F5C242',
   ['--success' as string]: '#2FA46A',
-  // Gradients
   ['--grad' as string]: 'linear-gradient(135deg,#3C1EE0 0%,#7A3AE8 45%,#C93FD8 100%)',
   ['--gradsoft' as string]: 'linear-gradient(135deg,#82AAEE 0%,#B47AE8 52%,#E882CC 100%)',
   ['--sh1' as string]: '0 1px 2px rgba(28,27,31,.04),0 2px 6px rgba(28,27,31,.05)',
@@ -42,33 +38,9 @@ const DASH_VARS: CSSProperties = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  Icons (re-rendered each call to avoid React key warnings on reuse)
+//  Icons
 // ═══════════════════════════════════════════════════════════════════════
 const Icon = {
-  home: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-  ),
-  essay: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-  ),
-  testing: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-  ),
-  activities: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-  ),
-  messages: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-  ),
-  discover: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-  ),
-  settings: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-  ),
-  video: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-  ),
   cal: () => (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4, verticalAlign: 'middle' }}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
   ),
@@ -89,6 +61,21 @@ const Icon = {
 // ═══════════════════════════════════════════════════════════════════════
 //  Shared building blocks
 // ═══════════════════════════════════════════════════════════════════════
+const AVATAR_PALETTE = ['#6C52E0', '#7A62EA', '#9B86F0', '#B47AE8', '#8177C9', '#7A3AE8', '#BDB0F5', '#5B24CC']
+
+function avatarColor(seed: string): string {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length]
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 function Avatar({ initials, color, size = 44 }: { initials: string; color?: string; size?: number }) {
   return (
     <div style={{
@@ -138,14 +125,6 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
   )
 }
 
-function ProgressBar({ pct }: { pct: number }) {
-  return (
-    <div style={{ height: 6, borderRadius: 999, background: 'var(--hair)', overflow: 'hidden', marginTop: 6 }}>
-      <div style={{ height: '100%', borderRadius: 999, background: 'var(--grad)', width: `${pct}%`, transition: 'width 0.8s var(--ease)' }} />
-    </div>
-  )
-}
-
 function BtnPrimary({ children, onClick, style = {} }: { children: ReactNode; onClick?: () => void; style?: CSSProperties }) {
   return (
     <button onClick={onClick} style={{
@@ -172,75 +151,7 @@ function BtnOutline({ children, onClick, style = {} }: { children: ReactNode; on
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  Mock data (matching the handoff prototype)
-// ═══════════════════════════════════════════════════════════════════════
-type Status = 'upcoming' | 'past'
-interface SessionItem {
-  id: number
-  initials: string
-  name: string
-  school: string
-  topic: string
-  when: string
-  status: Status
-  color: string
-}
-
-const SESSION_DATA: { essays: SessionItem[]; testing: SessionItem[]; activities: SessionItem[] } = {
-  essays: [
-    { id: 1, initials: 'MH', name: 'Michael Haskins', school: "Michigan '29", topic: 'Common App Essay Review', when: 'Tomorrow · 4:30 PM', status: 'upcoming', color: '#7A62EA' },
-    { id: 2, initials: 'EM', name: 'Ella McIlwain',   school: "UF '29",       topic: 'Personal Statement Draft', when: 'May 2 · 3:00 PM',  status: 'upcoming', color: '#8177C9' },
-    { id: 3, initials: 'MH', name: 'Michael Haskins', school: "Michigan '29", topic: 'Essay Outline Session',    when: 'Apr 18',           status: 'past',     color: '#7A62EA' },
-    { id: 4, initials: 'EM', name: 'Ella McIlwain',   school: "UF '29",       topic: 'Hook & Introduction',      when: 'Apr 10',           status: 'past',     color: '#8177C9' },
-  ],
-  testing: [
-    { id: 5, initials: 'BP', name: 'Ben Pinero', school: "Duke '29", topic: 'SAT Math Strategies', when: 'Sat · 11:00 AM',  status: 'upcoming', color: '#B47AE8' },
-    { id: 6, initials: 'AS', name: 'Alex Sokol', school: "Yale '29", topic: 'ACT Science Review',  when: 'May 3 · 1:00 PM', status: 'upcoming', color: '#7A3AE8' },
-    { id: 7, initials: 'BP', name: 'Ben Pinero', school: "Duke '29", topic: 'SAT Practice Review', when: 'Apr 15',          status: 'past',     color: '#B47AE8' },
-    { id: 8, initials: 'AS', name: 'Alex Sokol', school: "Yale '29", topic: 'ACT Reading Drill',   when: 'Apr 8',           status: 'past',     color: '#7A3AE8' },
-  ],
-  activities: [
-    { id: 9,  initials: 'DR', name: 'Diyah Rahaman', school: "Cornell '29", topic: 'Activities List Strategy', when: 'Fri · 2:00 PM',   status: 'upcoming', color: '#9B86F0' },
-    { id: 10, initials: 'KF', name: 'Khady Fall',    school: "Cornell '29", topic: 'Extracurricular Framing',  when: 'May 5 · 4:00 PM', status: 'upcoming', color: '#BDB0F5' },
-    { id: 11, initials: 'DR', name: 'Diyah Rahaman', school: "Cornell '29", topic: 'Activities Brainstorm',    when: 'Apr 10',          status: 'past',     color: '#9B86F0' },
-  ],
-}
-
-interface DraftItem {
-  id: number
-  title: string
-  status: string
-  pct: number
-  updated: string
-  tutor: string
-}
-const DRAFTS: DraftItem[] = [
-  { id: 1, title: 'Common App Personal Statement', status: 'In Progress', pct: 70,  updated: 'Assigned by Alex S.',  tutor: 'Michael H.' },
-  { id: 2, title: 'Why Cornell Supplemental Essay', status: 'Not Started', pct: 0,   updated: 'Assigned by Alex S.',  tutor: 'Michael H.' },
-  { id: 3, title: 'Common App Personal Statement', status: 'In Progress', pct: 40,  updated: 'Assigned by Alex S.',  tutor: 'Ella M.'    },
-  { id: 4, title: 'Common App Personal Statement', status: 'Draft Done',  pct: 100, updated: 'Completed Apr 12',     tutor: 'Ella M.'    },
-]
-
-const ACTIVITIES_LIST = [
-  { id: 1, title: 'Varsity Soccer Team',          role: 'Captain (Junior Year)',         category: 'Athletics',  status: 'finalized'   as const },
-  { id: 2, title: 'Student Government',           role: 'Class Representative',          category: 'Leadership', status: 'finalized'   as const },
-  { id: 3, title: 'Science Olympiad',             role: 'Team Member & Event Lead',       category: 'Academic',   status: 'needs-work'  as const },
-  { id: 4, title: 'Hospital Volunteering',        role: 'Weekly Saturday Shifts',         category: 'Community',  status: 'needs-work'  as const },
-  { id: 5, title: 'Independent Research Project', role: 'Computational Biology Lab, NYU', category: 'Research',   status: 'not-started' as const },
-  { id: 6, title: 'Math Tutoring',                role: 'Peer Tutor, 2 hrs/week',         category: 'Service',    status: 'not-started' as const },
-]
-
-const TUTORS_ALL = [
-  { initials: 'KF', name: 'Khady Fall',    school: "Cornell '29",  major: 'Global Development',   rating: 4.9, reviews: 18, price: 20, tags: ['Activities', 'Essays'],   color: '#9B86F0' },
-  { initials: 'EM', name: 'Ella McIlwain', school: "UF '29",       major: 'Nutritional Sciences', rating: 5.0, reviews: 12, price: 22, tags: ['Essay Writing'],          color: '#8177C9' },
-  { initials: 'AS', name: 'Alex Sokol',    school: "Yale '29",     major: 'Biomedical Eng.',      rating: 4.7, reviews: 22, price: 28, tags: ['ACT Prep', 'Test Prep'],   color: '#7A3AE8' },
-  { initials: 'JT', name: 'Jordan Torres', school: "Penn '29",     major: 'Finance',              rating: 4.9, reviews: 15, price: 24, tags: ['Essays', 'Mock Interview'], color: '#BDB0F5' },
-  { initials: 'SR', name: 'Sofia Reyes',   school: "Stanford '29", major: 'CS',                   rating: 5.0, reviews: 8,  price: 35, tags: ['SAT Prep', 'Test Prep'],   color: '#6C52E0' },
-  { initials: 'MR', name: 'Maya Robinson', school: "Brown '29",    major: 'Psychology',           rating: 4.8, reviews: 11, price: 22, tags: ['Common App', 'Essays'],   color: '#B47AE8' },
-]
-
-// ═══════════════════════════════════════════════════════════════════════
-//  Real data: assigned practice tests
+//  Real data types
 // ═══════════════════════════════════════════════════════════════════════
 interface AssignedTest {
   id: string
@@ -249,6 +160,37 @@ interface AssignedTest {
   question_count: number
   created_at: string
   tutor_name: string | null
+}
+
+interface ApiSession {
+  id: string
+  student_id: string
+  tutor_id: string
+  day_of_week: string
+  time_slot: string
+  scheduled_date: string
+  status: string
+  notes: string
+  created_at: string
+  student_name: string
+  tutor_name: string
+  is_tutor: boolean
+}
+
+interface ApiConversation {
+  partner_id: string
+  partner_name: string
+  last_message: string
+  last_message_at: string
+  last_message_is_mine: boolean
+}
+
+interface ApiMessage {
+  id: string
+  sender_id: string
+  receiver_id: string
+  content: string
+  created_at: string
 }
 
 function shortTutorName(name: string | null): string {
@@ -262,28 +204,83 @@ function emojiForExam(exam: 'SAT' | 'ACT'): string {
   return exam === 'SAT' ? '📝' : '🔬'
 }
 
+function todayISO(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function isUpcoming(s: ApiSession): boolean {
+  return s.status === 'confirmed' && s.scheduled_date >= todayISO()
+}
+
+function isPast(s: ApiSession): boolean {
+  return s.status !== 'confirmed' || s.scheduled_date < todayISO()
+}
+
+function formatSessionWhen(s: ApiSession): string {
+  const date = new Date(s.scheduled_date + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today.getTime() + 86400000)
+  const sameDay = date.toDateString() === today.toDateString()
+  const isTomorrow = date.toDateString() === tomorrow.toDateString()
+  if (sameDay) return `Today · ${s.time_slot}`
+  if (isTomorrow) return `Tomorrow · ${s.time_slot}`
+  const month = date.toLocaleDateString('en-US', { month: 'short' })
+  return `${month} ${date.getDate()} · ${s.time_slot}`
+}
+
+function formatPastWhen(s: ApiSession): string {
+  const date = new Date(s.scheduled_date + 'T00:00:00')
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 // ═══════════════════════════════════════════════════════════════════════
-//  Session row (for upcoming/past meetings)
+//  Session row
 // ═══════════════════════════════════════════════════════════════════════
-function SessionRow({ s }: { s: SessionItem }) {
+function SessionRow({ s, onJoin, onViewNotes }: { s: ApiSession; onJoin?: () => void; onViewNotes?: () => void }) {
+  const counterpart = s.is_tutor ? s.student_name : s.tutor_name
+  const upcoming = isUpcoming(s)
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
       padding: '14px 0', borderBottom: '1px solid var(--hair)',
     }}>
-      <Avatar initials={s.initials} color={s.color} size={44} />
+      <Avatar initials={initialsOf(counterpart)} color={avatarColor(s.id)} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{s.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--graphite)', marginTop: 2 }}>{s.topic} · {s.school}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{counterpart}</div>
+        <div style={{ fontSize: 12, color: 'var(--graphite)', marginTop: 2 }}>
+          {s.notes ? s.notes : (s.is_tutor ? 'Student session' : 'Tutoring session')}
+        </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--graphite)', display: 'inline-flex', alignItems: 'center' }}>
-          {Icon.cal()} {s.when}
+          {Icon.cal()} {upcoming ? formatSessionWhen(s) : formatPastWhen(s)}
         </span>
-        {s.status === 'upcoming'
-          ? <BtnPrimary>{Icon.play()} Join</BtnPrimary>
-          : <BtnOutline>View Notes</BtnOutline>}
+        {upcoming
+          ? <BtnPrimary onClick={onJoin}>{Icon.play()} Join</BtnPrimary>
+          : <BtnOutline onClick={onViewNotes}>View Notes</BtnOutline>}
       </div>
+    </div>
+  )
+}
+
+function EmptyState({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div style={{ padding: '40px 12px', textAlign: 'center' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--graphite)', marginBottom: 4 }}>{title}</div>
+      {sub && <div style={{ fontSize: 12, color: 'var(--mute)' }}>{sub}</div>}
     </div>
   )
 }
@@ -317,21 +314,22 @@ function PanelHome({
   setPanel,
   firstName,
   tests,
+  sessions,
+  conversations,
   onStartTest,
+  onJoinSession,
 }: {
   setPanel: (p: PanelKey) => void
   firstName: string
   tests: AssignedTest[]
+  sessions: ApiSession[]
+  conversations: ApiConversation[]
   onStartTest: (id: string) => void
+  onJoinSession: (id: string) => void
 }) {
-  const upcomingCount =
-    SESSION_DATA.essays.filter((s) => s.status === 'upcoming').length +
-    SESSION_DATA.testing.filter((s) => s.status === 'upcoming').length +
-    SESSION_DATA.activities.filter((s) => s.status === 'upcoming').length
-  const pastCount =
-    SESSION_DATA.essays.filter((s) => s.status === 'past').length +
-    SESSION_DATA.testing.filter((s) => s.status === 'past').length +
-    SESSION_DATA.activities.filter((s) => s.status === 'past').length
+  const upcoming = sessions.filter(isUpcoming)
+  const past = sessions.filter(isPast)
+  const nextSession = upcoming[0]
 
   return (
     <div>
@@ -348,14 +346,16 @@ function PanelHome({
           Ready to move forward, {firstName}?
         </h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.88)', maxWidth: 380, lineHeight: 1.55 }}>
-          Your next session with <strong style={{ color: 'white' }}>Michael Haskins</strong> is tomorrow at 4:30 PM.
+          {nextSession
+            ? <>Your next session with <strong style={{ color: 'white' }}>{nextSession.is_tutor ? nextSession.student_name : nextSession.tutor_name}</strong> is {formatSessionWhen(nextSession).toLowerCase()}.</>
+            : <>No upcoming sessions yet — find a tutor to get started.</>}
         </p>
         <div style={{ display: 'flex', gap: 16, marginTop: 20, flexWrap: 'wrap' }}>
           {[
-            [String(upcomingCount), 'Upcoming sessions'],
-            ['$240', 'Total spent'],
-            ['4.9', 'Avg tutor rating'],
-            [String(pastCount), 'Sessions done'],
+            [String(upcoming.length), 'Upcoming sessions'],
+            [String(past.length),     'Sessions done'],
+            [String(tests.length),    'Practice tests'],
+            [String(conversations.length), 'Conversations'],
           ].map(([n, l]) => (
             <div key={l} style={{
               background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.22)',
@@ -369,20 +369,19 @@ function PanelHome({
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px', gap: 20, alignItems: 'start' }}>
-        {/* Upcoming */}
         <Card>
           <SectionHeader title="Upcoming Sessions" action="View all" onAction={() => setPanel('essays')} />
-          {SESSION_DATA.essays.filter((s) => s.status === 'upcoming').slice(0, 2).map((s) => <SessionRow key={s.id} s={s} />)}
-          {SESSION_DATA.testing.filter((s) => s.status === 'upcoming').slice(0, 1).map((s) => <SessionRow key={s.id} s={s} />)}
+          {upcoming.length === 0
+            ? <EmptyState title="No upcoming sessions" sub="Book one from Discover." />
+            : upcoming.slice(0, 3).map((s) => (
+                <SessionRow key={s.id} s={s} onJoin={() => onJoinSession(s.id)} />
+              ))}
         </Card>
 
-        {/* Assignments — real assigned practice tests */}
         <Card>
           <SectionHeader title="Assignments" action="View all" onAction={() => setPanel('testing')} />
           {tests.length === 0 ? (
-            <div style={{ padding: '20px 0', fontSize: 13, color: 'var(--mute)', textAlign: 'center' }}>
-              No practice tests assigned yet.
-            </div>
+            <EmptyState title="No practice tests assigned yet" />
           ) : (
             tests.slice(0, 3).map((t) => (
               <div key={t.id} onClick={() => onStartTest(t.id)} style={{
@@ -403,78 +402,75 @@ function PanelHome({
           )}
         </Card>
 
-        {/* Messages preview */}
         <Card>
           <SectionHeader title="Messages" action="Open" onAction={() => setPanel('messages')} />
-          {[
-            { initials: 'MH', name: 'Michael Haskins', preview: 'Great work on the intro! Let’s…',  time: '2m', unread: true,  color: '#7A62EA' },
-            { initials: 'DR', name: 'Diyah Rahaman',   preview: 'Can you send the updated draft?',  time: '1h', unread: false, color: '#9B86F0' },
-            { initials: 'BP', name: 'Ben Pinero',      preview: "Here are this week's SAT tips.",   time: '3h', unread: false, color: '#B47AE8' },
-          ].map((t) => (
-            <div key={t.name} onClick={() => setPanel('messages')} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '10px 8px', borderRadius: 10, cursor: 'pointer',
-              transition: 'background .15s',
-            }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--s1)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <Avatar initials={t.initials} color={t.color} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{t.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.preview}</div>
+          {conversations.length === 0 ? (
+            <EmptyState title="No conversations yet" />
+          ) : (
+            conversations.slice(0, 4).map((c) => (
+              <div key={c.partner_id} onClick={() => setPanel('messages')} style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 8px', borderRadius: 10, cursor: 'pointer',
+                transition: 'background .15s',
+              }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--s1)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={36} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{c.partner_name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.last_message}</div>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--mute)' }}>{relativeTime(c.last_message_at)}</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-                <span style={{ fontSize: 11, color: 'var(--mute)' }}>{t.time}</span>
-                {t.unread && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--p500)' }} />}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </Card>
       </div>
     </div>
   )
 }
 
-function PanelEssays() {
+function PanelEssays({
+  sessions,
+  onJoinSession,
+  onViewSessionNotes,
+}: {
+  sessions: ApiSession[]
+  onJoinSession: (id: string) => void
+  onViewSessionNotes: (id: string) => void
+}) {
   const [tab, setTab] = useState('drafts')
-  const sessions = SESSION_DATA.essays
+  const upcoming = sessions.filter(isUpcoming)
+  const past = sessions.filter(isPast)
 
   return (
     <div>
       <Tabs value={tab} onChange={setTab} options={[{ v: 'drafts', l: 'My Drafts' }, { v: 'sessions', l: 'Sessions' }]} />
       {tab === 'drafts' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          {DRAFTS.map((d) => (
-            <Card key={d.id} style={{ cursor: 'pointer', transition: 'box-shadow .2s' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', flex: 1, marginRight: 12, lineHeight: 1.35 }}>{d.title}</div>
-                <Pill color={d.pct === 100 ? 'green' : d.pct > 0 ? 'amber' : 'mute'}>{d.status}</Pill>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--mute)', marginBottom: 10 }}>{d.updated} · Tutor: {d.tutor}</div>
-              {d.pct > 0 && (
-                <>
-                  <ProgressBar pct={d.pct} />
-                  <div style={{ fontSize: 11, color: 'var(--p500)', fontWeight: 600, marginTop: 5 }}>{d.pct}% complete</div>
-                </>
-              )}
-              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                <BtnPrimary style={{ fontSize: 11 }}>Open Draft</BtnPrimary>
-                <BtnOutline style={{ fontSize: 11 }}>Request Feedback</BtnOutline>
-              </div>
-            </Card>
-          ))}
-        </div>
+        <Card style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>✍️</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Essay drafts coming soon</div>
+          <div style={{ fontSize: 12, color: 'var(--mute)' }}>Your tutor will be able to assign drafts here for you to work on.</div>
+        </Card>
       )}
       {tab === 'sessions' && (
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Upcoming</div>
           <Card style={{ marginBottom: 20 }}>
-            {sessions.filter((s) => s.status === 'upcoming').map((s) => <SessionRow key={s.id} s={s} />)}
+            {upcoming.length === 0
+              ? <EmptyState title="No upcoming sessions" />
+              : upcoming.map((s) => (
+                  <SessionRow key={s.id} s={s} onJoin={() => onJoinSession(s.id)} />
+                ))}
           </Card>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Past</div>
           <Card>
-            {sessions.filter((s) => s.status === 'past').map((s) => <SessionRow key={s.id} s={s} />)}
+            {past.length === 0
+              ? <EmptyState title="No past sessions" />
+              : past.map((s) => (
+                  <SessionRow key={s.id} s={s} onViewNotes={() => onViewSessionNotes(s.id)} />
+                ))}
           </Card>
         </div>
       )}
@@ -485,14 +481,21 @@ function PanelEssays() {
 function PanelTesting({
   tests,
   loading,
+  sessions,
   onStartTest,
+  onJoinSession,
+  onViewSessionNotes,
 }: {
   tests: AssignedTest[]
   loading: boolean
+  sessions: ApiSession[]
   onStartTest: (id: string) => void
+  onJoinSession: (id: string) => void
+  onViewSessionNotes: (id: string) => void
 }) {
   const [tab, setTab] = useState('tests')
-  const sessions = SESSION_DATA.testing
+  const upcoming = sessions.filter(isUpcoming)
+  const past = sessions.filter(isPast)
 
   return (
     <div>
@@ -538,11 +541,19 @@ function PanelTesting({
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Upcoming</div>
           <Card style={{ marginBottom: 20 }}>
-            {sessions.filter((s) => s.status === 'upcoming').map((s) => <SessionRow key={s.id} s={s} />)}
+            {upcoming.length === 0
+              ? <EmptyState title="No upcoming sessions" />
+              : upcoming.map((s) => (
+                  <SessionRow key={s.id} s={s} onJoin={() => onJoinSession(s.id)} />
+                ))}
           </Card>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Past</div>
           <Card>
-            {sessions.filter((s) => s.status === 'past').map((s) => <SessionRow key={s.id} s={s} />)}
+            {past.length === 0
+              ? <EmptyState title="No past sessions" />
+              : past.map((s) => (
+                  <SessionRow key={s.id} s={s} onViewNotes={() => onViewSessionNotes(s.id)} />
+                ))}
           </Card>
         </div>
       )}
@@ -550,51 +561,46 @@ function PanelTesting({
   )
 }
 
-function PanelActivities() {
+function PanelActivities({
+  sessions,
+  onJoinSession,
+  onViewSessionNotes,
+}: {
+  sessions: ApiSession[]
+  onJoinSession: (id: string) => void
+  onViewSessionNotes: (id: string) => void
+}) {
   const [tab, setTab] = useState('list')
-  const sessions = SESSION_DATA.activities
-  const statusStyle: Record<'finalized' | 'needs-work' | 'not-started', PillColor> = {
-    finalized: 'green', 'needs-work': 'amber', 'not-started': 'mute',
-  }
-  const statusLabel = { finalized: 'Finalized', 'needs-work': 'Needs Work', 'not-started': 'Not Started' }
+  const upcoming = sessions.filter(isUpcoming)
+  const past = sessions.filter(isPast)
 
   return (
     <div>
       <Tabs value={tab} onChange={setTab} options={[{ v: 'list', l: 'Activities List' }, { v: 'sessions', l: 'Sessions' }]} />
       {tab === 'list' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {ACTIVITIES_LIST.map((a, i) => (
-            <Card key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-                background: 'var(--p100)', color: 'var(--p600)',
-                display: 'grid', placeItems: 'center',
-                fontSize: 13, fontWeight: 700,
-              }}>{i + 1}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{a.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--graphite)', marginTop: 2 }}>{a.role}</div>
-              </div>
-              <Pill color="mute">{a.category}</Pill>
-              <Pill color={statusStyle[a.status]}>{statusLabel[a.status]}</Pill>
-              <BtnOutline style={{ fontSize: 11 }}>Edit</BtnOutline>
-            </Card>
-          ))}
-          <Card style={{ border: '2px dashed var(--hair)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px', cursor: 'pointer', gap: 8 }}>
-            <span style={{ fontSize: 20, color: 'var(--mute)' }}>+</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)' }}>Add activity</span>
-          </Card>
-        </div>
+        <Card style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🎯</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Activities list coming soon</div>
+          <div style={{ fontSize: 12, color: 'var(--mute)' }}>Build out your Common App activities list with help from your tutor.</div>
+        </Card>
       )}
       {tab === 'sessions' && (
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Upcoming</div>
           <Card style={{ marginBottom: 20 }}>
-            {sessions.filter((s) => s.status === 'upcoming').map((s) => <SessionRow key={s.id} s={s} />)}
+            {upcoming.length === 0
+              ? <EmptyState title="No upcoming sessions" />
+              : upcoming.map((s) => (
+                  <SessionRow key={s.id} s={s} onJoin={() => onJoinSession(s.id)} />
+                ))}
           </Card>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mute)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Past</div>
           <Card>
-            {sessions.filter((s) => s.status === 'past').map((s) => <SessionRow key={s.id} s={s} />)}
+            {past.length === 0
+              ? <EmptyState title="No past sessions" />
+              : past.map((s) => (
+                  <SessionRow key={s.id} s={s} onViewNotes={() => onViewSessionNotes(s.id)} />
+                ))}
           </Card>
         </div>
       )}
@@ -602,32 +608,75 @@ function PanelActivities() {
   )
 }
 
-interface ChatMessage { me: boolean; text: string; time: string }
-
-function PanelMessages() {
-  const [msgs, setMsgs] = useState<ChatMessage[]>([
-    { me: false, text: "Hey Alex! I just read through your Common App intro — solid start. The hook is really personal.", time: 'Yesterday 4:02 PM' },
-    { me: true,  text: "Thanks! I wasn't sure if the opening line was too casual. Should I keep it?", time: 'Yesterday 4:18 PM' },
-    { me: false, text: "Keep it! The casual voice actually works in your favor. Let's tighten the second paragraph though.", time: 'Yesterday 4:31 PM' },
-    { me: true,  text: 'Perfect, thank you. See you tomorrow at 4:30!', time: 'Yesterday 4:35 PM' },
-    { me: false, text: "Great work on the intro! Let's nail the conclusion tomorrow 💪", time: '2 min ago' },
-  ])
+function PanelMessages({
+  conversations,
+  myInitials,
+  myFullName,
+}: {
+  conversations: ApiConversation[]
+  myInitials: string
+  myFullName: string
+}) {
+  const [activeId, setActiveId] = useState<string | null>(conversations[0]?.partner_id ?? null)
+  const [msgs, setMsgs] = useState<ApiMessage[]>([])
+  const [myIds, setMyIds] = useState<string[]>([])
   const [input, setInput] = useState('')
+  const [loadingThread, setLoadingThread] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
 
-  const send = () => {
-    if (!input.trim()) return
-    setMsgs((m) => [...m, { me: true, text: input.trim(), time: 'Just now' }])
+  useEffect(() => {
+    if (!activeId && conversations.length > 0) {
+      setActiveId(conversations[0].partner_id)
+    }
+  }, [conversations, activeId])
+
+  useEffect(() => {
+    if (!activeId) {
+      setMsgs([])
+      return
+    }
+    let cancelled = false
+    setLoadingThread(true)
+    fetch(`/api/messages?with=${encodeURIComponent(activeId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        setMsgs(data.messages ?? [])
+        setMyIds(data.myIds ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setMsgs([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingThread(false)
+      })
+    return () => { cancelled = true }
+  }, [activeId])
+
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+  }, [msgs])
+
+  async function send() {
+    const content = input.trim()
+    if (!content || !activeId) return
     setInput('')
-    setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollTop = 9999 }, 50)
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiverId: activeId, content }),
+      })
+      if (!res.ok) return
+      const { message } = await res.json()
+      if (message) setMsgs((prev) => [...prev, message])
+    } catch {
+      // best-effort
+    }
   }
 
-  const threads = [
-    { initials: 'MH', name: 'Michael Haskins', preview: 'Great work on the intro!', time: '2m',        unread: true,  color: '#7A62EA', active: true  },
-    { initials: 'DR', name: 'Diyah Rahaman',   preview: 'Can you send the draft?',  time: '1h',        unread: false, color: '#9B86F0', active: false },
-    { initials: 'BP', name: 'Ben Pinero',      preview: 'SAT tips inside',          time: '3h',        unread: false, color: '#B47AE8', active: false },
-    { initials: 'EM', name: 'Ella McIlwain',   preview: 'See you next Tuesday!',    time: 'Yesterday', unread: false, color: '#8177C9', active: false },
-  ]
+  const activePartner = conversations.find((c) => c.partner_id === activeId)
+  const myIdSet = new Set(myIds)
 
   return (
     <div style={{
@@ -637,147 +686,102 @@ function PanelMessages() {
     }}>
       <div style={{ borderRight: '1px solid var(--hair)', overflowY: 'auto' }}>
         <div style={{ padding: '14px 16px 10px', fontSize: 13, fontWeight: 700, color: 'var(--ink)', borderBottom: '1px solid var(--hair)' }}>Conversations</div>
-        {threads.map((t) => (
-          <div key={t.name} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', cursor: 'pointer',
-            background: t.active ? 'var(--p050)' : 'transparent', transition: 'background .15s',
-          }}>
-            <Avatar initials={t.initials} color={t.color} size={40} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{t.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.preview}</div>
+        {conversations.length === 0 ? (
+          <EmptyState title="No conversations" sub="Book a session to start chatting with a tutor." />
+        ) : conversations.map((c) => {
+          const isActive = c.partner_id === activeId
+          return (
+            <div key={c.partner_id} onClick={() => setActiveId(c.partner_id)} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', cursor: 'pointer',
+              background: isActive ? 'var(--p050)' : 'transparent', transition: 'background .15s',
+            }}>
+              <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{c.partner_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.last_message}</div>
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--mute)' }}>{relativeTime(c.last_message_at)}</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-              <span style={{ fontSize: 11, color: 'var(--mute)' }}>{t.time}</span>
-              {t.unread && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--p500)' }} />}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Avatar initials="MH" color="#7A62EA" size={36} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>Michael Haskins</div>
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 500 }}>● Online now</div>
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            {[Icon.video, Icon.bell].map((Ic, i) => (
-              <div key={i} style={{
-                width: 34, height: 34, borderRadius: 10, border: '1.5px solid var(--hair)',
-                background: 'var(--s1)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--graphite)',
-              }}><Ic /></div>
-            ))}
-          </div>
-        </div>
-        <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {msgs.map((m, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexDirection: m.me ? 'row-reverse' : 'row' }}>
-              <Avatar initials={m.me ? 'AJ' : 'MH'} color={m.me ? '#9B86F0' : '#7A62EA'} size={28} />
+        {activePartner ? (
+          <>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Avatar initials={initialsOf(activePartner.partner_name)} color={avatarColor(activePartner.partner_id)} size={36} />
               <div>
-                <div style={{
-                  maxWidth: 400, padding: '10px 14px', borderRadius: 16, fontSize: 13, lineHeight: 1.55,
-                  background: m.me ? 'var(--grad)' : 'var(--s2)',
-                  color: m.me ? 'white' : 'var(--ink)',
-                  borderBottomRightRadius: m.me ? 4 : 16,
-                  borderBottomLeftRadius: m.me ? 16 : 4,
-                }}>{m.text}</div>
-                <div style={{ fontSize: 10, color: 'var(--mute)', marginTop: 4, textAlign: m.me ? 'right' : 'left' }}>{m.time}</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{activePartner.partner_name}</div>
               </div>
             </div>
-          ))}
-        </div>
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--hair)', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input
-            value={input} onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') send() }}
-            placeholder="Message Michael…"
-            style={{
-              flex: 1, height: 40, borderRadius: 12, border: '1.5px solid var(--hair)',
-              background: 'var(--s1)', padding: '0 14px',
-              fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', outline: 'none',
-            }}
-          />
-          <button onClick={send} style={{
-            width: 40, height: 40, borderRadius: 12, border: 'none', cursor: 'pointer',
-            background: 'var(--grad)', color: 'white', display: 'grid', placeItems: 'center',
-            boxShadow: '0 4px 12px rgba(122,58,232,0.3)',
-          }}>{Icon.send()}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PanelDiscover() {
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
-          <div style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--mute)' }}>{Icon.search()}</div>
-          <input placeholder="Search tutors, schools, subjects…" style={{
-            width: '100%', height: 40, borderRadius: 12, border: '1.5px solid var(--hair)',
-            background: 'var(--s0)', paddingLeft: 34, paddingRight: 12,
-            fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', outline: 'none',
-          }} />
-        </div>
-        {['Essays', 'Test Prep', 'Activities', 'Common App'].map((f, i) => (
-          <button key={f} style={{
-            padding: '8px 16px', borderRadius: 999,
-            background: i === 0 ? 'var(--p100)' : 'var(--s0)',
-            color: i === 0 ? 'var(--p600)' : 'var(--graphite)',
-            border: i === 0 ? '1.5px solid var(--p300)' : '1.5px solid var(--hair)',
-            fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-          }}>{f}</button>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 16 }}>
-        {TUTORS_ALL.map((t) => (
-          <Card key={t.name} style={{ cursor: 'pointer', transition: 'transform .2s, box-shadow .2s' }}>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-              <Avatar initials={t.initials} color={t.color} size={50} />
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>{t.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--graphite)', marginTop: 2 }}>{t.school} · {t.major}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                  <span style={{ color: 'var(--amber)', fontSize: 13 }}>★</span>
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>{t.rating}</span>
-                  <span style={{ fontSize: 11, color: 'var(--mute)' }}>({t.reviews}) · ${t.price}/hr</span>
+            <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {loadingThread ? (
+                <div style={{ textAlign: 'center', color: 'var(--mute)', fontSize: 13, paddingTop: 24 }}>Loading…</div>
+              ) : msgs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--mute)', fontSize: 13, paddingTop: 24 }}>
+                  No messages yet. Say hi!
                 </div>
-              </div>
+              ) : msgs.map((m) => {
+                const me = myIdSet.has(m.sender_id)
+                return (
+                  <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexDirection: me ? 'row-reverse' : 'row' }}>
+                    <Avatar
+                      initials={me ? myInitials : initialsOf(activePartner.partner_name)}
+                      color={me ? avatarColor(myFullName || 'me') : avatarColor(activePartner.partner_id)}
+                      size={28}
+                    />
+                    <div>
+                      <div style={{
+                        maxWidth: 400, padding: '10px 14px', borderRadius: 16, fontSize: 13, lineHeight: 1.55,
+                        background: me ? 'var(--grad)' : 'var(--s2)',
+                        color: me ? 'white' : 'var(--ink)',
+                        borderBottomRightRadius: me ? 4 : 16,
+                        borderBottomLeftRadius: me ? 16 : 4,
+                      }}>{m.content}</div>
+                      <div style={{ fontSize: 10, color: 'var(--mute)', marginTop: 4, textAlign: me ? 'right' : 'left' }}>{relativeTime(m.created_at)}</div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-              {t.tags.map((tag, i) => (
-                <span key={tag} style={{
-                  padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-                  background: i === 0 ? 'var(--p050)' : 'var(--s2)',
-                  color: i === 0 ? 'var(--p600)' : 'var(--graphite)',
-                }}>{tag}</span>
-              ))}
+            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--hair)', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input
+                value={input} onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') send() }}
+                placeholder={`Message ${activePartner.partner_name.split(' ')[0]}…`}
+                style={{
+                  flex: 1, height: 40, borderRadius: 12, border: '1.5px solid var(--hair)',
+                  background: 'var(--s1)', padding: '0 14px',
+                  fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', outline: 'none',
+                }}
+              />
+              <button onClick={send} style={{
+                width: 40, height: 40, borderRadius: 12, border: 'none', cursor: 'pointer',
+                background: 'var(--grad)', color: 'white', display: 'grid', placeItems: 'center',
+                boxShadow: '0 4px 12px rgba(122,58,232,0.3)',
+              }}>{Icon.send()}</button>
             </div>
-            <BtnPrimary style={{ width: '100%', justifyContent: 'center', fontSize: 11 }}>BOOK SESSION</BtnPrimary>
-          </Card>
-        ))}
+          </>
+        ) : (
+          <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--mute)', fontSize: 13 }}>
+            Select a conversation to start chatting.
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function PanelSettings({ name, email }: { name: string; email: string }) {
-  const txns = [
-    { initials: 'MH', name: 'Michael Haskins', type: 'Essay Writing', date: 'Apr 23', amount: 20, color: '#7A62EA' },
-    { initials: 'BP', name: 'Ben Pinero',      type: 'SAT Prep',      date: 'Apr 21', amount: 30, color: '#B47AE8' },
-    { initials: 'DR', name: 'Diyah Rahaman',   type: 'Activities',    date: 'Apr 18', amount: 20, color: '#9B86F0' },
-    { initials: 'MH', name: 'Michael Haskins', type: 'Essay Writing', date: 'Apr 15', amount: 20, color: '#7A62EA' },
-    { initials: 'BP', name: 'Ben Pinero',      type: 'SAT Prep',      date: 'Apr 12', amount: 30, color: '#B47AE8' },
-  ]
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase() || 'AJ'
+function PanelSettings({
+  name,
+  email,
+  sessionCount,
+}: {
+  name: string
+  email: string
+  sessionCount: number
+}) {
+  const initials = initialsOf(name || 'You')
   return (
     <div style={{ maxWidth: 720 }}>
       <Card style={{ marginBottom: 20 }}>
@@ -785,32 +789,20 @@ function PanelSettings({ name, email }: { name: string; email: string }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
           <Avatar initials={initials} color="#7A62EA" size={56} />
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{name}</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{name || 'Student'}</div>
             <div style={{ fontSize: 13, color: 'var(--mute)' }}>{email} · High School Student</div>
           </div>
           <BtnOutline style={{ marginLeft: 'auto' }}>Edit Profile</BtnOutline>
         </div>
       </Card>
       <Card style={{ marginBottom: 20 }}>
-        <SectionHeader title="Spending & Transactions" />
-        <div style={{ display: 'flex', gap: 24, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--hair)' }}>
-          {[['$240', 'Total spent'], ['12', 'Sessions'], ['$20', 'Avg/session']].map(([n, l]) => (
-            <div key={l}>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{n}</div>
-              <div style={{ fontSize: 12, color: 'var(--mute)', fontWeight: 500 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-        {txns.map((t, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: '1px solid var(--hair)' }}>
-            <Avatar initials={t.initials} color={t.color} size={36} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{t.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--mute)' }}>{t.type} · {t.date}</div>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>−${t.amount}</div>
+        <SectionHeader title="Sessions" />
+        <div style={{ display: 'flex', gap: 24, paddingTop: 4 }}>
+          <div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{sessionCount}</div>
+            <div style={{ fontSize: 12, color: 'var(--mute)', fontWeight: 500 }}>Total sessions</div>
           </div>
-        ))}
+        </div>
       </Card>
       <Card>
         <SectionHeader title="Notifications" />
@@ -840,25 +832,15 @@ function PanelSettings({ name, email }: { name: string; email: string }) {
 // ═══════════════════════════════════════════════════════════════════════
 //  App shell
 // ═══════════════════════════════════════════════════════════════════════
-type PanelKey = 'home' | 'essays' | 'testing' | 'activities' | 'messages' | 'discover' | 'settings'
-
-const NAV_ITEMS: { id: PanelKey; label: string; icon: () => React.ReactElement; badge?: boolean }[] = [
-  { id: 'home',       label: 'Home',       icon: Icon.home },
-  { id: 'essays',     label: 'Essays',     icon: Icon.essay },
-  { id: 'testing',    label: 'Testing',    icon: Icon.testing },
-  { id: 'activities', label: 'Activities', icon: Icon.activities },
-  { id: 'messages',   label: 'Messages',   icon: Icon.messages, badge: true },
-  { id: 'discover',   label: 'Discover',   icon: Icon.discover },
-]
+type PanelKey = 'home' | 'essays' | 'testing' | 'activities' | 'messages' | 'settings'
 
 const PANEL_META: Record<PanelKey, [string, string]> = {
   home:       ['', ''],
   essays:     ['Essays',          'Drafts & sessions'],
   testing:    ['Testing',         'Practice tests & sessions'],
   activities: ['Activities',      'Activities list & sessions'],
-  messages:   ['Messages',        '2 unread conversations'],
-  discover:   ['Discover Tutors', '200+ tutors at top universities'],
-  settings:   ['Settings',        'Account, spending & notifications'],
+  messages:   ['Messages',        ''],
+  settings:   ['Settings',        'Account & notifications'],
 }
 
 function todayLabel() {
@@ -873,12 +855,22 @@ function greetingFor(date = new Date()) {
   return 'Good evening'
 }
 
-export default function StudentDashboardPage() {
+const VALID_PANELS: PanelKey[] = ['home', 'essays', 'testing', 'activities', 'messages', 'settings']
+
+function StudentDashboardInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [panel, setPanel] = useState<PanelKey>('home')
+  const searchParams = useSearchParams()
+  const initialPanel = (() => {
+    const p = searchParams.get('panel') as PanelKey | null
+    return p && VALID_PANELS.includes(p) ? p : 'home'
+  })()
+
+  const [panel, setPanel] = useState<PanelKey>(initialPanel)
   const [tests, setTests] = useState<AssignedTest[]>([])
   const [testsLoading, setTestsLoading] = useState(true)
+  const [sessions, setSessions] = useState<ApiSession[]>([])
+  const [conversations, setConversations] = useState<ApiConversation[]>([])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -891,18 +883,35 @@ export default function StudentDashboardPage() {
       .then((d) => setTests(d.tests ?? []))
       .catch(() => setTests([]))
       .finally(() => setTestsLoading(false))
+
+    fetch('/api/sessions')
+      .then((r) => r.json())
+      .then((d) => setSessions(d.sessions ?? []))
+      .catch(() => setSessions([]))
+
+    fetch('/api/messages')
+      .then((r) => r.json())
+      .then((d) => setConversations(d.conversations ?? []))
+      .catch(() => setConversations([]))
   }, [status])
 
   const fullName = session?.user?.name ?? ''
   const firstName = useMemo(() => fullName.split(/\s+/)[0] || 'there', [fullName])
-  const initials = useMemo(() => {
-    const parts = fullName.trim().split(/\s+/).filter(Boolean)
-    if (parts.length === 0) return 'AJ'
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }, [fullName])
+  const myInitials = useMemo(() => initialsOf(fullName || 'You'), [fullName])
 
   const onStartTest = (id: string) => router.push(`/student/tests/${id}`)
+  const onJoinSession = (id: string) => router.push(`/session/${id}`)
+  const onViewSessionNotes = (id: string) => router.push(`/session/${id}/notes`)
+
+  const onSidebarSelect = (id: SidebarItemId) => {
+    if (id === 'discover') {
+      router.push('/find-tutors')
+    } else {
+      setPanel(id)
+    }
+  }
+
+  const upcomingCount = sessions.filter(isUpcoming).length
 
   if (status === 'loading') {
     return (
@@ -917,9 +926,8 @@ export default function StudentDashboardPage() {
     )
   }
 
-  const sidebarBg = 'var(--ink2)'
   const homeTitle = `${greetingFor()}, ${firstName} 👋`
-  const homeSub = `${todayLabel()} · 3 upcoming sessions`
+  const homeSub = `${todayLabel()} · ${upcomingCount} upcoming session${upcomingCount === 1 ? '' : 's'}`
   const [titleRaw, subRaw] = PANEL_META[panel]
   const title = panel === 'home' ? homeTitle : titleRaw
   const sub = panel === 'home' ? homeSub : subRaw
@@ -933,57 +941,14 @@ export default function StudentDashboardPage() {
         fontFamily: 'var(--font-montserrat), system-ui, sans-serif',
       }}
     >
-      {/* SIDEBAR */}
-      <aside style={{
-        width: 72, background: sidebarBg,
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        padding: '20px 0 24px', flexShrink: 0, zIndex: 10, gap: 4,
-      }}>
-        <Link href="/home" style={{
-          width: 40, height: 40, borderRadius: 12, background: 'var(--grad)',
-          display: 'grid', placeItems: 'center', marginBottom: 28, flexShrink: 0,
-          cursor: 'pointer', textDecoration: 'none',
-        }}>
-          <span style={{ fontFamily: '"Shrikhand",serif', color: 'white', fontSize: 22, lineHeight: 1 }}>k</span>
-        </Link>
+      <StudentSidebar
+        activeId={panel === 'settings' ? 'settings' : (panel as SidebarItemId)}
+        initials={myInitials}
+        onSelect={onSidebarSelect}
+        onSettingsClick={() => setPanel('settings')}
+      />
 
-        {NAV_ITEMS.map((item) => {
-          const active = panel === item.id
-          return (
-            <button key={item.id} onClick={() => setPanel(item.id)} style={{
-              width: 48, height: 48, borderRadius: 14,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', gap: 4, border: 'none', position: 'relative',
-              background: active ? 'rgba(122,98,234,0.28)' : 'transparent',
-              transition: 'background .15s',
-            }}>
-              <div style={{ color: active ? 'var(--p300)' : 'rgba(255,255,255,0.45)' }}>{item.icon()}</div>
-              <span style={{ fontSize: 9, fontWeight: 600, color: active ? 'var(--p300)' : 'rgba(255,255,255,0.35)', letterSpacing: '0.03em', lineHeight: 1 }}>{item.label}</span>
-              {item.badge && <div style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: '50%', background: '#E882CC', border: `1.5px solid ${sidebarBg}` }} />}
-            </button>
-          )
-        })}
-
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setPanel('settings')} style={{
-            width: 36, height: 36, borderRadius: 10, border: 'none',
-            background: panel === 'settings' ? 'rgba(122,98,234,0.28)' : 'rgba(255,255,255,0.07)',
-            color: panel === 'settings' ? 'var(--p300)' : 'rgba(255,255,255,0.4)',
-            display: 'grid', placeItems: 'center', cursor: 'pointer', transition: 'background .15s',
-          }}>{Icon.settings()}</button>
-          <div style={{
-            width: 36, height: 36, borderRadius: '50%',
-            background: 'var(--p500)', color: 'white',
-            display: 'grid', placeItems: 'center',
-            fontWeight: 700, fontSize: 13, cursor: 'pointer',
-            border: '2px solid rgba(255,255,255,0.15)',
-          }}>{initials}</div>
-        </div>
-      </aside>
-
-      {/* MAIN */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* TOPBAR */}
         <div style={{
           height: 60, background: 'var(--s0)', borderBottom: '1px solid var(--hair)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1002,35 +967,81 @@ export default function StudentDashboardPage() {
                 fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', outline: 'none',
               }} />
             </div>
-            <div style={{ width: 36, height: 36, borderRadius: 10, border: '1.5px solid var(--hair)', background: 'var(--s1)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--graphite)', position: 'relative' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, border: '1.5px solid var(--hair)', background: 'var(--s1)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--graphite)' }}>
               {Icon.bell()}
-              <div style={{ position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: '50%', background: '#E882CC', border: '1.5px solid var(--s1)' }} />
             </div>
           </div>
         </div>
 
-        {/* CONTENT */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px 48px' }}>
           {panel === 'home' && (
             <PanelHome
               setPanel={setPanel}
               firstName={firstName}
               tests={tests}
+              sessions={sessions}
+              conversations={conversations}
               onStartTest={onStartTest}
+              onJoinSession={onJoinSession}
             />
           )}
-          {panel === 'essays' && <PanelEssays />}
-          {panel === 'testing' && (
-            <PanelTesting tests={tests} loading={testsLoading} onStartTest={onStartTest} />
+          {panel === 'essays' && (
+            <PanelEssays
+              sessions={sessions}
+              onJoinSession={onJoinSession}
+              onViewSessionNotes={onViewSessionNotes}
+            />
           )}
-          {panel === 'activities' && <PanelActivities />}
-          {panel === 'messages' && <PanelMessages />}
-          {panel === 'discover' && <PanelDiscover />}
+          {panel === 'testing' && (
+            <PanelTesting
+              tests={tests}
+              loading={testsLoading}
+              sessions={sessions}
+              onStartTest={onStartTest}
+              onJoinSession={onJoinSession}
+              onViewSessionNotes={onViewSessionNotes}
+            />
+          )}
+          {panel === 'activities' && (
+            <PanelActivities
+              sessions={sessions}
+              onJoinSession={onJoinSession}
+              onViewSessionNotes={onViewSessionNotes}
+            />
+          )}
+          {panel === 'messages' && (
+            <PanelMessages
+              conversations={conversations}
+              myInitials={myInitials}
+              myFullName={fullName}
+            />
+          )}
           {panel === 'settings' && (
-            <PanelSettings name={fullName || 'Student'} email={session?.user?.email ?? ''} />
+            <PanelSettings
+              name={fullName || 'Student'}
+              email={session?.user?.email ?? ''}
+              sessionCount={sessions.length}
+            />
           )}
         </div>
       </div>
     </div>
+  )
+}
+
+export default function StudentDashboardPage() {
+  return (
+    <React.Suspense fallback={
+      <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: '#F7F5F0' }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: '50%',
+          border: '3px solid #BDB0F5', borderTopColor: 'transparent',
+          animation: 'kspin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes kspin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    }>
+      <StudentDashboardInner />
+    </React.Suspense>
   )
 }

@@ -3,7 +3,6 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { Header } from '@/components/landing/header'
 import {
   Search,
   MapPin,
@@ -16,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
+import { StudentSidebar, type SidebarItemId } from '@/components/student-sidebar'
 
 interface TutorMatch {
   userId: string
@@ -177,10 +177,37 @@ export default function FindTutorsPage() {
     setSortMode('best')
   }
 
+  const userName = session?.user?.name ?? ''
+  const myInitials = (() => {
+    const parts = userName.trim().split(/\s+/).filter(Boolean)
+    if (parts.length === 0) return '?'
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  })()
+
+  const onSidebarSelect = (id: SidebarItemId) => {
+    if (id === 'discover') return // already here
+    router.push(`/student/dashboard?panel=${id}`)
+  }
+  const onSettingsClick = () => router.push('/student/dashboard?panel=settings')
+
+  const Shell = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#F7F5F0' }}>
+      <StudentSidebar
+        activeId="discover"
+        initials={myInitials}
+        onSelect={onSidebarSelect}
+        onSettingsClick={onSettingsClick}
+      />
+      <div style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
+        {children}
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
-      <>
-        <Header />
+      <Shell>
         <div className="feed-hero">
           <div className="feed-hero-k">k</div>
           <div className="feed-hero-eyebrow">Browse</div>
@@ -195,14 +222,13 @@ export default function FindTutorsPage() {
             <p className="text-mute text-sm font-medium">Finding your best tutor matches...</p>
           </div>
         </main>
-      </>
+      </Shell>
     )
   }
 
   if (error) {
     return (
-      <>
-        <Header />
+      <Shell>
         <div className="feed-hero">
           <div className="feed-hero-k">k</div>
           <div className="feed-hero-eyebrow">Browse</div>
@@ -226,14 +252,12 @@ export default function FindTutorsPage() {
             </button>
           </div>
         </main>
-      </>
+      </Shell>
     )
   }
 
   return (
-    <>
-      <Header />
-
+    <Shell>
       {/* HERO BANNER */}
       <div className="feed-hero">
         <div className="feed-hero-k">k</div>
@@ -452,7 +476,7 @@ export default function FindTutorsPage() {
         /* ── HERO BANNER ── */
         .feed-hero {
           background: linear-gradient(135deg, #82AAEE 0%, #B47AE8 52%, #E882CC 100%);
-          padding: 120px 48px 48px;
+          padding: 56px 48px 48px;
           position: relative;
           overflow: hidden;
         }
@@ -503,7 +527,7 @@ export default function FindTutorsPage() {
         /* ── SEARCH + FILTERS BAR ── */
         .filter-bar {
           position: sticky;
-          top: 64px;
+          top: 0;
           z-index: 90;
           background: rgba(247, 245, 240, 0.95);
           backdrop-filter: blur(12px);
@@ -898,6 +922,6 @@ export default function FindTutorsPage() {
           }
         }
       `}</style>
-    </>
+    </Shell>
   )
 }
