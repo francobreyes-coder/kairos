@@ -28,27 +28,43 @@ export async function POST(req: Request) {
   const body = await req.json()
   const supabase = getSupabase()
 
-  const studentData = {
+  const update: Record<string, unknown> = {
     user_id: session.user.id,
-    name: session.user.name ?? '',
     email: session.user.email ?? '',
-    grade: body.grade ?? '',
-    interests: body.interests ?? [],
-    intended_major: body.intendedMajor ?? '',
-    colleges_of_interest: body.collegesOfInterest ?? [],
-    goals: body.goals ?? [],
-    preferred_teaching_style: body.preferredTeachingStyle ?? '',
-    tutor_personality: body.tutorPersonality ?? [],
-    onboarding_completed: body.onboardingCompleted ?? false,
     updated_at: new Date().toISOString(),
   }
 
+  if (body.name !== undefined) update.name = body.name
+  if (body.grade !== undefined) update.grade = body.grade
+  if (body.interests !== undefined) update.interests = body.interests
+  if (body.intendedMajor !== undefined) update.intended_major = body.intendedMajor
+  if (body.collegesOfInterest !== undefined) update.colleges_of_interest = body.collegesOfInterest
+  if (body.goals !== undefined) update.goals = body.goals
+  if (body.preferredTeachingStyle !== undefined) update.preferred_teaching_style = body.preferredTeachingStyle
+  if (body.tutorPersonality !== undefined) update.tutor_personality = body.tutorPersonality
+  if (body.onboardingCompleted !== undefined) update.onboarding_completed = body.onboardingCompleted
+
+  if (body.bio !== undefined) update.bio = body.bio
+  if (body.dateOfBirth !== undefined) update.date_of_birth = body.dateOfBirth || null
+  if (body.gender !== undefined) update.gender = body.gender
+  if (body.phone !== undefined) update.phone = body.phone
+  if (body.profilePhoto !== undefined) update.profile_photo = body.profilePhoto
+
   const { error } = await supabase
     .from('students')
-    .upsert(studentData, { onConflict: 'user_id' })
+    .upsert(update, { onConflict: 'user_id' })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Keep users.name in sync so session-driven UI (sidebar initials, header
+  // greeting) reflects the latest value after a session refetch.
+  if (typeof body.name === 'string' && body.name.trim().length > 0) {
+    await supabase
+      .from('users')
+      .update({ name: body.name, updated_at: new Date().toISOString() })
+      .eq('id', session.user.id)
   }
 
   return NextResponse.json({ ok: true })

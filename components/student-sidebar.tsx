@@ -47,12 +47,18 @@ export function StudentSidebar({
   hasMessageBadge = false,
   onSelect,
   onSettingsClick,
+  onProfileClick,
+  profilePhotoUrl,
+  isProfileActive = false,
 }: {
-  activeId: SidebarItemId | 'settings'
+  activeId: SidebarItemId | 'settings' | 'profile'
   initials: string
   hasMessageBadge?: boolean
   onSelect: (id: SidebarItemId) => void
   onSettingsClick: () => void
+  onProfileClick?: () => void
+  profilePhotoUrl?: string
+  isProfileActive?: boolean
 }) {
   return (
     <aside style={{
@@ -94,13 +100,25 @@ export function StudentSidebar({
           color: activeId === 'settings' ? '#BDB0F5' : 'rgba(255,255,255,0.4)',
           display: 'grid', placeItems: 'center', cursor: 'pointer', transition: 'background .15s',
         }}>{SidebarIcon.settings()}</button>
-        <div style={{
-          width: 36, height: 36, borderRadius: '50%',
-          background: '#7A62EA', color: 'white',
-          display: 'grid', placeItems: 'center',
-          fontWeight: 700, fontSize: 13, cursor: 'pointer',
-          border: '2px solid rgba(255,255,255,0.15)',
-        }}>{initials}</div>
+        <button
+          onClick={onProfileClick}
+          aria-label="Edit profile"
+          style={{
+            width: 36, height: 36, borderRadius: '50%',
+            background: profilePhotoUrl ? 'transparent' : '#7A62EA',
+            backgroundImage: profilePhotoUrl ? `url(${profilePhotoUrl})` : undefined,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            color: 'white',
+            display: 'grid', placeItems: 'center',
+            fontWeight: 700, fontSize: 13,
+            cursor: onProfileClick ? 'pointer' : 'default',
+            border: isProfileActive
+              ? '2px solid #BDB0F5'
+              : '2px solid rgba(255,255,255,0.15)',
+            padding: 0,
+            overflow: 'hidden',
+          }}
+        >{profilePhotoUrl ? '' : initials}</button>
       </div>
     </aside>
   )

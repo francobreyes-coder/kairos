@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
 import { StudentSidebar, type SidebarItemId } from '@/components/student-sidebar'
+import { PhotoCropModal } from '@/components/photo-crop-modal'
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Design tokens (scoped to dashboard via :root override on the wrapper)
@@ -772,14 +773,403 @@ function PanelMessages({
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  Profile editor
+// ═══════════════════════════════════════════════════════════════════════
+interface StudentProfileForm {
+  name: string
+  bio: string
+  dateOfBirth: string
+  gender: string
+  phone: string
+  profilePhoto: string
+}
+
+const GENDER_OPTIONS = [
+  { v: '', l: 'Prefer not to say' },
+  { v: 'female', l: 'Female' },
+  { v: 'male', l: 'Male' },
+  { v: 'non-binary', l: 'Non-binary' },
+  { v: 'other', l: 'Other' },
+]
+
+function photoUrl(path: string): string {
+  return `/api/storage?path=${encodeURIComponent(path)}`
+}
+
+function formatDob(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function PanelProfile({
+  sessionName,
+  sessionEmail,
+  onPhotoChange,
+  onNameChange,
+}: {
+  sessionName: string
+  sessionEmail: string
+  onPhotoChange: (path: string) => void
+  onNameChange: (name: string) => void
+}) {
+  const [data, setData] = useState<StudentProfileForm | null>(null)
+  const [draft, setDraft] = useState<StudentProfileForm | null>(null)
+  const [editing, setEditing] = useState<'personal' | 'bio' | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [cropSrc, setCropSrc] = useState<string | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/student/profile')
+      .then((r) => r.json())
+      .then(({ student }) => {
+        if (cancelled) return
+        setData({
+          name: student?.name || sessionName,
+          bio: student?.bio || '',
+          dateOfBirth: student?.date_of_birth || '',
+          gender: student?.gender || '',
+          phone: student?.phone || '',
+          profilePhoto: student?.profile_photo || '',
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        setData({ name: sessionName, bio: '', dateOfBirth: '', gender: '', phone: '', profilePhoto: '' })
+      })
+    return () => { cancelled = true }
+  }, [sessionName])
+
+  function flash() {
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1800)
+  }
+
+  async function persist(patch: Partial<StudentProfileForm>) {
+    setSaving(true)
+    const body: Record<string, unknown> = {}
+    if (patch.name !== undefined) body.name = patch.name
+    if (patch.bio !== undefined) body.bio = patch.bio
+    if (patch.dateOfBirth !== undefined) body.dateOfBirth = patch.dateOfBirth
+    if (patch.gender !== undefined) body.gender = patch.gender
+    if (patch.phone !== undefined) body.phone = patch.phone
+    if (patch.profilePhoto !== undefined) body.profilePhoto = patch.profilePhoto
+    const res = await fetch('/api/student/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setSaving(false)
+    if (!res.ok) return false
+    flash()
+    return true
+  }
+
+  function startEdit(section: 'personal' | 'bio') {
+    if (!data) return
+    setEditing(section)
+    setDraft({ ...data })
+  }
+
+  function cancelEdit() {
+    setEditing(null)
+    setDraft(null)
+  }
+
+  async function saveSection() {
+    if (!draft || !data) return
+    const ok = await persist({
+      name: draft.name,
+      bio: draft.bio,
+      dateOfBirth: draft.dateOfBirth,
+      gender: draft.gender,
+      phone: draft.phone,
+    })
+    if (!ok) return
+    const next = { ...data, ...draft }
+    setData(next)
+    if (next.name !== data.name) onNameChange(next.name)
+    setEditing(null)
+    setDraft(null)
+  }
+
+  function onPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setCropSrc(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  async function onPhotoCropped(blob: Blob) {
+    setCropSrc(null)
+    if (!data) return
+    setPhotoBusy(true)
+    const form = new FormData()
+    form.append('file', new File([blob], 'profile.png', { type: 'image/png' }))
+    form.append('fileType', 'profile-photo')
+    const up = await fetch('/api/upload', { method: 'POST', body: form })
+    const { path } = await up.json()
+    if (path) {
+      const ok = await persist({ profilePhoto: path })
+      if (ok) {
+        setData({ ...data, profilePhoto: path })
+        onPhotoChange(path)
+      }
+    }
+    setPhotoBusy(false)
+  }
+
+  async function removePhoto() {
+    if (!data?.profilePhoto) return
+    setPhotoBusy(true)
+    await fetch('/api/upload', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: data.profilePhoto }),
+    })
+    const ok = await persist({ profilePhoto: '' })
+    if (ok) {
+      setData({ ...data, profilePhoto: '' })
+      onPhotoChange('')
+    }
+    setPhotoBusy(false)
+  }
+
+  if (!data) {
+    return (
+      <div style={{ maxWidth: 720 }}>
+        <Card><EmptyState title="Loading profile…" /></Card>
+      </div>
+    )
+  }
+
+  const initials = initialsOf(data.name || 'You')
+  const inputStyle: CSSProperties = {
+    height: 40, padding: '0 12px', borderRadius: 10,
+    border: '1.5px solid var(--hair)', background: 'var(--s0)',
+    fontSize: 13, color: 'var(--ink)', outline: 'none',
+    fontFamily: 'inherit', width: '100%',
+  }
+  const labelStyle: CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '0.04em',
+    color: 'var(--mute)', marginBottom: 6,
+  }
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      {/* Photo */}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Profile photo</div>
+          {saved && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--success)' }}>Saved</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ position: 'relative' }}>
+            {data.profilePhoto ? (
+              <img
+                src={photoUrl(data.profilePhoto)}
+                alt="Profile"
+                style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--hair)' }}
+              />
+            ) : (
+              <div style={{
+                width: 96, height: 96, borderRadius: '50%',
+                background: '#7A62EA', color: 'white',
+                display: 'grid', placeItems: 'center',
+                fontSize: 30, fontWeight: 700,
+                border: '2px solid var(--hair)',
+              }}>{initials}</div>
+            )}
+            <label style={{
+              position: 'absolute', bottom: 0, right: 0,
+              width: 30, height: 30, borderRadius: '50%',
+              background: 'var(--grad)', color: 'white',
+              display: 'grid', placeItems: 'center',
+              cursor: photoBusy ? 'wait' : 'pointer',
+              boxShadow: 'var(--sh1)',
+              opacity: photoBusy ? 0.6 : 1,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <input type="file" accept="image/*" onChange={onPhotoSelect} disabled={photoBusy} style={{ display: 'none' }} />
+            </label>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: 'var(--graphite)', lineHeight: 1.5 }}>
+              A clear headshot from the shoulders up makes it easier for tutors and classmates to recognize you.
+            </div>
+            {data.profilePhoto && (
+              <button
+                onClick={removePhoto}
+                disabled={photoBusy}
+                style={{
+                  marginTop: 10, padding: '6px 12px', borderRadius: 999,
+                  border: '1.5px solid var(--hair)', background: 'transparent',
+                  fontSize: 12, fontWeight: 600, color: 'var(--graphite)',
+                  cursor: photoBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                }}
+              >Remove photo</button>
+            )}
+          </div>
+        </div>
+        {cropSrc && (
+          <PhotoCropModal
+            imageSrc={cropSrc}
+            onCrop={onPhotoCropped}
+            onCancel={() => setCropSrc(null)}
+          />
+        )}
+      </Card>
+
+      {/* Personal info */}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Personal information</div>
+          {editing === 'personal' ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <BtnOutline onClick={cancelEdit}>Cancel</BtnOutline>
+              <BtnPrimary onClick={saveSection}>{saving ? 'Saving…' : 'Save'}</BtnPrimary>
+            </div>
+          ) : (
+            <BtnOutline onClick={() => startEdit('personal')}>Edit</BtnOutline>
+          )}
+        </div>
+
+        {editing === 'personal' && draft ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Full name</label>
+              <input
+                type="text"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Date of birth</label>
+              <input
+                type="date"
+                value={draft.dateOfBirth}
+                onChange={(e) => setDraft({ ...draft, dateOfBirth: e.target.value })}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Gender</label>
+              <select
+                value={draft.gender}
+                onChange={(e) => setDraft({ ...draft, gender: e.target.value })}
+                style={inputStyle}
+              >
+                {GENDER_OPTIONS.map((o) => (
+                  <option key={o.v} value={o.v}>{o.l}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Phone number</label>
+              <input
+                type="tel"
+                value={draft.phone}
+                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                placeholder="(555) 123-4567"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input
+                type="email"
+                value={sessionEmail}
+                disabled
+                style={{ ...inputStyle, background: 'var(--s2)', color: 'var(--mute)', cursor: 'not-allowed' }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
+            <ProfileField label="Full name" value={data.name || '—'} />
+            <ProfileField label="Date of birth" value={formatDob(data.dateOfBirth)} />
+            <ProfileField label="Gender" value={GENDER_OPTIONS.find((o) => o.v === data.gender)?.l ?? '—'} />
+            <ProfileField label="Phone number" value={data.phone || '—'} />
+            <ProfileField label="Email" value={sessionEmail} />
+          </div>
+        )}
+      </Card>
+
+      {/* Bio */}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>About me</div>
+          {editing === 'bio' ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <BtnOutline onClick={cancelEdit}>Cancel</BtnOutline>
+              <BtnPrimary onClick={saveSection}>{saving ? 'Saving…' : 'Save'}</BtnPrimary>
+            </div>
+          ) : (
+            <BtnOutline onClick={() => startEdit('bio')}>Edit</BtnOutline>
+          )}
+        </div>
+
+        {editing === 'bio' && draft ? (
+          <div>
+            <textarea
+              value={draft.bio}
+              onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
+              rows={5}
+              maxLength={500}
+              placeholder="Tell tutors a bit about yourself — what you're studying, your goals, anything that helps them prepare."
+              style={{
+                width: '100%', padding: 12, borderRadius: 10,
+                border: '1.5px solid var(--hair)', background: 'var(--s0)',
+                fontSize: 13, color: 'var(--ink)', outline: 'none',
+                fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5,
+              }}
+            />
+            <div style={{ fontSize: 11, color: 'var(--mute)', textAlign: 'right', marginTop: 4 }}>
+              {draft.bio.length} / 500
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            fontSize: 13, color: data.bio ? 'var(--ink)' : 'var(--mute)',
+            lineHeight: 1.6, whiteSpace: 'pre-wrap', minHeight: 24,
+          }}>
+            {data.bio || 'Add a short bio so tutors can get to know you.'}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+function ProfileField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--mute)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{value}</div>
+    </div>
+  )
+}
+
 function PanelSettings({
   name,
   email,
   sessionCount,
+  onEditProfile,
 }: {
   name: string
   email: string
   sessionCount: number
+  onEditProfile: () => void
 }) {
   const initials = initialsOf(name || 'You')
   return (
@@ -792,7 +1182,7 @@ function PanelSettings({
             <div style={{ fontSize: 16, fontWeight: 700 }}>{name || 'Student'}</div>
             <div style={{ fontSize: 13, color: 'var(--mute)' }}>{email} · High School Student</div>
           </div>
-          <BtnOutline style={{ marginLeft: 'auto' }}>Edit Profile</BtnOutline>
+          <BtnOutline style={{ marginLeft: 'auto' }} onClick={onEditProfile}>Edit Profile</BtnOutline>
         </div>
       </Card>
       <Card style={{ marginBottom: 20 }}>
@@ -832,7 +1222,7 @@ function PanelSettings({
 // ═══════════════════════════════════════════════════════════════════════
 //  App shell
 // ═══════════════════════════════════════════════════════════════════════
-type PanelKey = 'home' | 'essays' | 'testing' | 'activities' | 'messages' | 'settings'
+type PanelKey = 'home' | 'essays' | 'testing' | 'activities' | 'messages' | 'settings' | 'profile'
 
 const PANEL_META: Record<PanelKey, [string, string]> = {
   home:       ['', ''],
@@ -841,6 +1231,7 @@ const PANEL_META: Record<PanelKey, [string, string]> = {
   activities: ['Activities',      'Activities list & sessions'],
   messages:   ['Messages',        ''],
   settings:   ['Settings',        'Account & notifications'],
+  profile:    ['Profile',         'Personal info & photo'],
 }
 
 function todayLabel() {
@@ -855,7 +1246,7 @@ function greetingFor(date = new Date()) {
   return 'Good evening'
 }
 
-const VALID_PANELS: PanelKey[] = ['home', 'essays', 'testing', 'activities', 'messages', 'settings']
+const VALID_PANELS: PanelKey[] = ['home', 'essays', 'testing', 'activities', 'messages', 'settings', 'profile']
 
 function StudentDashboardInner() {
   const { data: session, status } = useSession()
@@ -871,6 +1262,8 @@ function StudentDashboardInner() {
   const [testsLoading, setTestsLoading] = useState(true)
   const [sessions, setSessions] = useState<ApiSession[]>([])
   const [conversations, setConversations] = useState<ApiConversation[]>([])
+  const [profilePhoto, setProfilePhoto] = useState<string>('')
+  const [overrideName, setOverrideName] = useState<string>('')
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -893,11 +1286,23 @@ function StudentDashboardInner() {
       .then((r) => r.json())
       .then((d) => setConversations(d.conversations ?? []))
       .catch(() => setConversations([]))
+
+    fetch('/api/student/profile')
+      .then((r) => r.json())
+      .then(({ student }) => {
+        if (student?.profile_photo) setProfilePhoto(student.profile_photo)
+        if (student?.name) setOverrideName(student.name)
+      })
+      .catch(() => {})
   }, [status])
 
-  const fullName = session?.user?.name ?? ''
+  const fullName = overrideName || session?.user?.name || ''
   const firstName = useMemo(() => fullName.split(/\s+/)[0] || 'there', [fullName])
   const myInitials = useMemo(() => initialsOf(fullName || 'You'), [fullName])
+  const photoPathForUrl = useMemo(
+    () => (profilePhoto ? `/api/storage?path=${encodeURIComponent(profilePhoto)}` : undefined),
+    [profilePhoto],
+  )
 
   const onStartTest = (id: string) => router.push(`/student/tests/${id}`)
   const onJoinSession = (id: string) => router.push(`/session/${id}`)
@@ -942,10 +1347,17 @@ function StudentDashboardInner() {
       }}
     >
       <StudentSidebar
-        activeId={panel === 'settings' ? 'settings' : (panel as SidebarItemId)}
+        activeId={
+          panel === 'settings' ? 'settings'
+          : panel === 'profile' ? 'profile'
+          : (panel as SidebarItemId)
+        }
         initials={myInitials}
         onSelect={onSidebarSelect}
         onSettingsClick={() => setPanel('settings')}
+        onProfileClick={() => setPanel('profile')}
+        profilePhotoUrl={photoPathForUrl}
+        isProfileActive={panel === 'profile'}
       />
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1021,6 +1433,15 @@ function StudentDashboardInner() {
               name={fullName || 'Student'}
               email={session?.user?.email ?? ''}
               sessionCount={sessions.length}
+              onEditProfile={() => setPanel('profile')}
+            />
+          )}
+          {panel === 'profile' && (
+            <PanelProfile
+              sessionName={fullName}
+              sessionEmail={session?.user?.email ?? ''}
+              onPhotoChange={setProfilePhoto}
+              onNameChange={setOverrideName}
             />
           )}
         </div>
