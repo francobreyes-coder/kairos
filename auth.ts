@@ -118,22 +118,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .from('users')
             .select('id')
             .eq('id', user.id)
-            .single()
+            .maybeSingle()
 
           if (!existing) {
-            // Check if there's already a credentials account with this email
+            // Carry over name/role from any existing row with this email so
+            // a tutor signing in via Google for the first time keeps their
+            // 'college' role instead of being silently demoted to
+            // 'high_school' (which would route them to the student dashboard).
             const { data: byEmail } = await supabase
               .from('users')
-              .select('id, name')
+              .select('name, role')
               .eq('email', user.email)
-              .single()
+              .order('updated_at', { ascending: false })
+              .limit(1)
+            const source = byEmail?.[0] ?? null
 
-            // Always create a row for the Google sub ID so messages can resolve names
             await supabase.from('users').insert({
               id: user.id,
               email: user.email ?? '',
-              name: user.name ?? byEmail?.name ?? '',
-              role: 'high_school',
+              name: user.name ?? source?.name ?? '',
+              role: source?.role ?? 'high_school',
               updated_at: new Date().toISOString(),
             })
           }
@@ -147,29 +151,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id
       }
-      // Fetch role from DB on first sign-in or when refreshed
+      // Fetch role from DB on first sign-in or when refreshed.
+      //
+      // Pull every row matching either the current user id OR the email and
+      // pick the most specific role. Tutors who originally signed up with
+      // credentials (role='college') and later sign in with Google end up
+      // with a second users row keyed by the Google sub; an id-first lookup
+      // would land on that row, see role='high_school', and route them to
+      // the student dashboard. Preferring any non-default role across rows
+      // heals those accounts on next sign-in.
       if (user || trigger === 'update') {
         try {
           const supabase = getSupabase()
-          // Check by ID first, then fall back to email
-          let data = null
-          const { data: byId } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', token.sub ?? user?.id)
-            .single()
-          data = byId
+          const userId = token.sub ?? user?.id
+          const email = token.email
+          const orParts = [
+            userId ? `id.eq.${userId}` : null,
+            email ? `email.eq.${email}` : null,
+          ].filter(Boolean) as string[]
 
-          if (!data && token.email) {
-            const { data: byEmail } = await supabase
+          let role: string | null = null
+          if (orParts.length > 0) {
+            const { data: rows } = await supabase
               .from('users')
               .select('role')
-              .eq('email', token.email)
-              .single()
-            data = byEmail
-          }
+              .or(orParts.join(','))
 
-          token.role = data?.role ?? null
+            for (const r of rows ?? []) {
+              if (r.role && r.role !== 'high_school') {
+                role = r.role
+                break
+              }
+            }
+            if (!role) role = rows?.[0]?.role ?? null
+          }
+          token.role = role
         } catch {
           token.role = null
         }
