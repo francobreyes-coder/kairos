@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/landing/header'
+import { TestAssignPanel } from '@/components/test-assign-panel'
 import {
   Loader2,
   ChevronRight,
@@ -342,6 +343,12 @@ export default function ViewTestPage({ params }: { params: Promise<{ id: string 
             >
               {showAnswers ? 'Hide Answers' : 'Show Answers'}
             </button>
+          </div>
+
+          {/* Assignment panel — students can only take the test if a tutor
+              has assigned it to them. */}
+          <div className="mb-8">
+            <TestAssignPanel testId={test.id} />
           </div>
 
           {/* Questions, optionally grouped by section (newer tests) and within

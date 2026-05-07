@@ -313,6 +313,7 @@ function Tabs({ value, onChange, options }: { value: string; onChange: (v: strin
 // ═══════════════════════════════════════════════════════════════════════
 function PanelHome({
   setPanel,
+  openConversation,
   firstName,
   tests,
   sessions,
@@ -321,6 +322,7 @@ function PanelHome({
   onJoinSession,
 }: {
   setPanel: (p: PanelKey) => void
+  openConversation: (partnerId: string) => void
   firstName: string
   tests: AssignedTest[]
   sessions: ApiSession[]
@@ -409,7 +411,7 @@ function PanelHome({
             <EmptyState title="No conversations yet" />
           ) : (
             conversations.slice(0, 4).map((c) => (
-              <div key={c.partner_id} onClick={() => setPanel('messages')} style={{
+              <div key={c.partner_id} onClick={() => openConversation(c.partner_id)} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 8px', borderRadius: 10, cursor: 'pointer',
                 transition: 'background .15s',
@@ -613,17 +615,27 @@ function PanelMessages({
   conversations,
   myInitials,
   myFullName,
+  initialPartnerId,
 }: {
   conversations: ApiConversation[]
   myInitials: string
   myFullName: string
+  initialPartnerId: string | null
 }) {
-  const [activeId, setActiveId] = useState<string | null>(conversations[0]?.partner_id ?? null)
+  const [activeId, setActiveId] = useState<string | null>(
+    initialPartnerId ?? conversations[0]?.partner_id ?? null,
+  )
   const [msgs, setMsgs] = useState<ApiMessage[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
   const [input, setInput] = useState('')
   const [loadingThread, setLoadingThread] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  // If a specific conversation was requested (e.g. clicking a preview on
+  // home), switch to it whenever that prop changes.
+  useEffect(() => {
+    if (initialPartnerId) setActiveId(initialPartnerId)
+  }, [initialPartnerId])
 
   useEffect(() => {
     if (!activeId && conversations.length > 0) {
@@ -1264,6 +1276,7 @@ function StudentDashboardInner() {
   const [conversations, setConversations] = useState<ApiConversation[]>([])
   const [profilePhoto, setProfilePhoto] = useState<string>('')
   const [overrideName, setOverrideName] = useState<string>('')
+  const [pendingPartnerId, setPendingPartnerId] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -1307,6 +1320,10 @@ function StudentDashboardInner() {
   const onStartTest = (id: string) => router.push(`/student/tests/${id}`)
   const onJoinSession = (id: string) => router.push(`/session/${id}`)
   const onViewSessionNotes = (id: string) => router.push(`/session/${id}/notes`)
+  const openConversation = (partnerId: string) => {
+    setPendingPartnerId(partnerId)
+    setPanel('messages')
+  }
 
   const onSidebarSelect = (id: SidebarItemId) => {
     if (id === 'discover') {
@@ -1389,6 +1406,7 @@ function StudentDashboardInner() {
           {panel === 'home' && (
             <PanelHome
               setPanel={setPanel}
+              openConversation={openConversation}
               firstName={firstName}
               tests={tests}
               sessions={sessions}
@@ -1426,6 +1444,7 @@ function StudentDashboardInner() {
               conversations={conversations}
               myInitials={myInitials}
               myFullName={fullName}
+              initialPartnerId={pendingPartnerId}
             />
           )}
           {panel === 'settings' && (

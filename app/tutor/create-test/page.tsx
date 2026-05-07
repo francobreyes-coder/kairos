@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/landing/header'
+import { TestAssignPanel } from '@/components/test-assign-panel'
 import {
   Loader2,
   ChevronRight,
@@ -635,38 +636,46 @@ export default function CreateTestPage() {
 
           {/* Step: Saved confirmation */}
           {step === 'save' && savedTestId && (
-            <div className="rounded-2xl border border-border bg-card p-10 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-border bg-card p-10 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h2 className="text-xl font-bold text-foreground mb-2">Test Saved!</h2>
+                <p className="text-muted-foreground mb-2">
+                  &ldquo;{testName}&rdquo; with{' '}
+                  {previewSections.reduce((a, s) => a + s.questions.length, 0)} questions across{' '}
+                  {previewSections.length} section{previewSections.length !== 1 ? 's' : ''} has been
+                  saved.
+                </p>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Assign it to one or more of your students below — they can only take the
+                  test once it&apos;s assigned.
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <Link
+                    href="/tutor/tests"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium text-muted-foreground border border-border hover:border-accent/30 hover:text-foreground transition-colors"
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    View All Tests
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setStep('filters')
+                      setPreviewSections([])
+                      setTestName('')
+                      setSavedTestId(null)
+                      setSections([makeSection()])
+                    }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+                  >
+                    Create Another
+                  </button>
+                </div>
               </div>
-              <h2 className="text-xl font-bold text-foreground mb-2">Test Saved!</h2>
-              <p className="text-muted-foreground mb-6">
-                &ldquo;{testName}&rdquo; with{' '}
-                {previewSections.reduce((a, s) => a + s.questions.length, 0)} questions across{' '}
-                {previewSections.length} section{previewSections.length !== 1 ? 's' : ''} has been
-                saved.
-              </p>
-              <div className="flex items-center justify-center gap-3">
-                <Link
-                  href="/tutor/tests"
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium text-muted-foreground border border-border hover:border-accent/30 hover:text-foreground transition-colors"
-                >
-                  <ClipboardList className="w-3.5 h-3.5" />
-                  View All Tests
-                </Link>
-                <button
-                  onClick={() => {
-                    setStep('filters')
-                    setPreviewSections([])
-                    setTestName('')
-                    setSavedTestId(null)
-                    setSections([makeSection()])
-                  }}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
-                >
-                  Create Another
-                </button>
-              </div>
+
+              <TestAssignPanel testId={savedTestId} />
             </div>
           )}
         </div>
