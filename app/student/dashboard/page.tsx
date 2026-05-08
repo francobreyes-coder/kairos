@@ -923,8 +923,9 @@ function PanelProfile({
     setCropSrc(null)
     if (!data) return
     setPhotoBusy(true)
+    const previousPath = data.profilePhoto || ''
     const form = new FormData()
-    form.append('file', new File([blob], 'profile.png', { type: 'image/png' }))
+    form.append('file', new File([blob], `profile-${Date.now()}.png`, { type: 'image/png' }))
     form.append('fileType', 'profile-photo')
     const up = await fetch('/api/upload', { method: 'POST', body: form })
     const { path } = await up.json()
@@ -933,6 +934,13 @@ function PanelProfile({
       if (ok) {
         setData({ ...data, profilePhoto: path })
         onPhotoChange(path)
+        if (previousPath && previousPath !== path) {
+          fetch('/api/upload', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: previousPath }),
+          }).catch(() => {})
+        }
       }
     }
     setPhotoBusy(false)

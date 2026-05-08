@@ -237,8 +237,12 @@ export default function ProfileDashboard() {
   async function handleCroppedPhoto(blob: Blob) {
     setCropSrc(null)
     setUploadingPhoto(true)
+    const previousPath = profile?.profilePhoto || ''
     const form = new FormData()
-    form.append('file', new File([blob], 'profile.png', { type: 'image/png' }))
+    // Unique filename per upload — the storage route serves with `Cache-Control: immutable`,
+    // so reusing the same path leaves stale images cached in the browser/CDN forever.
+    const uniqueName = `profile-${Date.now()}.png`
+    form.append('file', new File([blob], uniqueName, { type: 'image/png' }))
     form.append('fileType', 'profile-photo')
     const res = await fetch('/api/upload', { method: 'POST', body: form })
     const { path } = await res.json()
@@ -252,6 +256,14 @@ export default function ProfileDashboard() {
       setProfile(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+
+      if (previousPath && previousPath !== path) {
+        fetch('/api/upload', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: previousPath }),
+        }).catch(() => {})
+      }
     }
     setUploadingPhoto(false)
   }

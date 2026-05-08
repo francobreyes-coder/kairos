@@ -119,6 +119,7 @@ const inputCls =
 
 interface FormState {
   name: string
+  email: string
   dob: string
   university: string
   graduationYear: string
@@ -133,6 +134,7 @@ interface FormState {
 
 const emptyForm: FormState = {
   name: '',
+  email: '',
   dob: '',
   university: '',
   graduationYear: '',
@@ -144,6 +146,8 @@ const emptyForm: FormState = {
   passion: '',
   whyKairos: '',
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function ApplyPage() {
   const { data: session } = useSession()
@@ -193,6 +197,12 @@ export default function ApplyPage() {
       })
       .catch(() => setDraftLoaded(true))
   }, [session, draftLoaded])
+
+  // Pre-fill email from the signed-in user when nothing has been entered yet
+  useEffect(() => {
+    if (!session?.user?.email) return
+    setForm((f) => (f.email ? f : { ...f, email: session.user!.email! }))
+  }, [session])
 
   // Auto-save draft (debounced)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null)
@@ -261,6 +271,7 @@ export default function ApplyPage() {
   // Progress
   const checks = [
     form.name.trim().length > 0,
+    EMAIL_RE.test(form.email.trim()),
     form.dob.length > 0,
     form.university.trim().length > 0,
     form.graduationYear.length > 0,
@@ -275,6 +286,7 @@ export default function ApplyPage() {
     setSubmitting(true)
     await submitApplication({
       name: form.name,
+      email: form.email.trim(),
       dob: form.dob,
       university: form.university,
       graduationYear: form.graduationYear,
@@ -379,6 +391,20 @@ export default function ApplyPage() {
                   placeholder="Full name"
                   className={inputCls}
                 />
+              </Field>
+
+              <Field label="Email" required>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set('email', e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  className={inputCls}
+                />
+                {form.email.length > 0 && !EMAIL_RE.test(form.email.trim()) && (
+                  <p className="text-xs text-destructive mt-1">Please enter a valid email address.</p>
+                )}
               </Field>
 
               <Field label="Date of Birth" required>

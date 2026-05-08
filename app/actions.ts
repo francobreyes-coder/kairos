@@ -34,6 +34,7 @@ export async function submitWaitlist(
 
 export async function submitApplication(data: {
   name: string
+  email: string
   dob: string
   university: string
   graduationYear: string
@@ -68,10 +69,11 @@ export async function submitApplication(data: {
 
     const session = await auth()
     const supabase = getSupabase()
+    const email = data.email?.trim() || session?.user?.email || ''
     await supabase.from('tutor_applications').insert({
       user_id: session?.user?.id ?? null,
       name: data.name,
-      email: session?.user?.email ?? '',
+      email,
       dob: data.dob,
       university: data.university,
       graduation_year: data.graduationYear,
@@ -88,9 +90,9 @@ export async function submitApplication(data: {
       application_status: 'pending',
     })
 
-    if (session?.user?.email) {
+    if (email) {
       try {
-        await sendApplicationReceivedEmail(session.user.email, data.name)
+        await sendApplicationReceivedEmail(email, data.name)
       } catch (e) {
         console.error('Failed to send application received email:', e)
       }

@@ -232,12 +232,22 @@ export default function OnboardingPage() {
   async function handleCroppedPhoto(blob: Blob) {
     setCropSrc(null)
     setUploadingPhoto(true)
+    const previousPath = profile.profilePhoto || ''
     const form = new FormData()
-    form.append('file', new File([blob], 'profile.png', { type: 'image/png' }))
+    form.append('file', new File([blob], `profile-${Date.now()}.png`, { type: 'image/png' }))
     form.append('fileType', 'profile-photo')
     const res = await fetch('/api/upload', { method: 'POST', body: form })
     const { path } = await res.json()
-    if (path) update('profilePhoto', path)
+    if (path) {
+      update('profilePhoto', path)
+      if (previousPath && previousPath !== path) {
+        fetch('/api/upload', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: previousPath }),
+        }).catch(() => {})
+      }
+    }
     setUploadingPhoto(false)
   }
 
