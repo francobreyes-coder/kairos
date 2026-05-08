@@ -97,6 +97,7 @@ export default function FindTutorsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [matches, setMatches] = useState<TutorMatch[]>([])
+  const [viewerSelfId, setViewerSelfId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -110,6 +111,13 @@ export default function FindTutorsPage() {
   } | null>(null)
   const [profileTutor, setProfileTutor] = useState<TutorMatch | null>(null)
 
+  // Tutors can browse /find-tutors but can't book. We detect tutor viewers
+  // either via the role on the session OR by the viewerSelfUserId the API
+  // returns (set when the viewer has an approved application + completed
+  // profile, even if their session role drifted).
+  const sessionRole = (session?.user as { role?: string | null } | undefined)?.role ?? null
+  const isTutorViewer = sessionRole === 'college' || viewerSelfId !== null
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
   }, [status, router])
@@ -122,6 +130,7 @@ export default function FindTutorsPage() {
       })
       .then((data) => {
         setMatches(data.matches ?? [])
+        setViewerSelfId(data.viewerSelfUserId ?? null)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -170,8 +179,18 @@ export default function FindTutorsPage() {
     }
     // 'best' = default API order (by match score)
 
+    // Tutor viewing their own list — pin their card to the top so the
+    // "Top Match" featured slot shows their own profile.
+    if (viewerSelfId) {
+      const selfIdx = result.findIndex((t) => t.userId === viewerSelfId)
+      if (selfIdx > 0) {
+        const self = result[selfIdx]
+        result = [self, ...result.slice(0, selfIdx), ...result.slice(selfIdx + 1)]
+      }
+    }
+
     return result
-  }, [matches, searchQuery, activeFilter, sortMode])
+  }, [matches, searchQuery, activeFilter, sortMode, viewerSelfId])
 
   function clearFilters() {
     setActiveFilter('All')
@@ -355,6 +374,7 @@ export default function FindTutorsPage() {
                 : null
               const startPrice = getStartingPrice(tutor.servicePrices ?? {})
               const isFeatured = idx === 0 && activeFilter === 'All' && !searchQuery && sortMode === 'best'
+              const isSelf = tutor.userId === viewerSelfId
 
               // Build tags: first service as primary, rest + subjects as secondary
               const serviceTags = tutor.services.map((s) => SERVICE_LABELS[s] ?? s)
@@ -377,7 +397,7 @@ export default function FindTutorsPage() {
                 >
                   {isFeatured && (
                     <div className="featured-badge">
-                      <Sparkles className="w-3 h-3" /> Top Match
+                      <Sparkles className="w-3 h-3" /> {isSelf ? 'Your Profile' : 'Top Match'}
                     </div>
                   )}
 
@@ -451,21 +471,28 @@ export default function FindTutorsPage() {
                     )}
                   </div>
 
-                  {/* Book Now */}
-                  <button
-                    className="btn-book"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setBookingTutor({
-                        id: tutor.userId,
-                        name: tutor.name,
-                        services: tutor.services,
-                        servicePrices: tutor.servicePrices,
-                      })
-                    }}
-                  >
-                    BOOK NOW
-                  </button>
+                  {/* Book Now — hidden for tutor viewers since they can't book.
+                       Their own card shows a "Your Profile" badge instead. */}
+                  {!isTutorViewer ? (
+                    <button
+                      className="btn-book"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setBookingTutor({
+                          id: tutor.userId,
+                          name: tutor.name,
+                          services: tutor.services,
+                          servicePrices: tutor.servicePrices,
+                        })
+                      }}
+                    >
+                      BOOK NOW
+                    </button>
+                  ) : (
+                    <button className="btn-book disabled" disabled>
+                      {isSelf ? 'YOUR PROFILE' : 'PREVIEW ONLY'}
+                    </button>
+                  )}
                 </div>
               )
             })}
@@ -473,7 +500,7 @@ export default function FindTutorsPage() {
         )}
       </div>
 
-      {bookingTutor && (
+      {bookingTutor && !isTutorViewer && (
         <BookingModal
           tutorId={bookingTutor.id}
           tutorName={bookingTutor.name}
@@ -487,16 +514,21 @@ export default function FindTutorsPage() {
       {profileTutor && (
         <TutorProfileModal
           tutor={profileTutor}
+          isSelf={profileTutor.userId === viewerSelfId}
           onClose={() => setProfileTutor(null)}
-          onBook={() => {
-            setBookingTutor({
-              id: profileTutor.userId,
-              name: profileTutor.name,
-              services: profileTutor.services,
-              servicePrices: profileTutor.servicePrices,
-            })
-            setProfileTutor(null)
-          }}
+          onBook={
+            isTutorViewer
+              ? undefined
+              : () => {
+                  setBookingTutor({
+                    id: profileTutor.userId,
+                    name: profileTutor.name,
+                    services: profileTutor.services,
+                    servicePrices: profileTutor.servicePrices,
+                  })
+                  setProfileTutor(null)
+                }
+          }
         />
       )}
 
@@ -840,6 +872,18 @@ export default function FindTutorsPage() {
         .btn-book:active {
           transform: scale(0.97);
         }
+        .btn-book.disabled,
+        .btn-book:disabled {
+          background: #ECE7FC;
+          color: #7A62EA;
+          box-shadow: none;
+          cursor: not-allowed;
+        }
+        .btn-book.disabled:hover,
+        .btn-book:disabled:hover {
+          opacity: 1;
+          transform: none;
+        }
         .btn-book-inline {
           display: inline-block;
           padding: 12px 32px;
@@ -895,6 +939,13 @@ export default function FindTutorsPage() {
           background: white;
           color: #7A3AE8;
           box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+        .tcard.featured .btn-book.disabled,
+        .tcard.featured .btn-book:disabled {
+          background: rgba(255, 255, 255, 0.85);
+          color: #7A3AE8;
+          cursor: default;
+          opacity: 1;
         }
         .featured-badge {
           display: inline-flex;

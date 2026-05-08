@@ -1,36 +1,18 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { auth } from '@/auth'
+import { landingForUser } from '@/lib/landing-for-user'
 
-import { useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+// Server-side router used as the callback URL for sign-in flows. Centralizes
+// the "where do I go after login" decision so tutors with an approved app +
+// completed profile land on /tutor/dashboard instead of the marketing home.
+export default async function PostLoginPage() {
+  const session = await auth()
+  if (!session?.user?.id) redirect('/auth')
 
-export default function PostLoginPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-
-  useEffect(() => {
-    if (status === 'loading') return
-    if (status === 'unauthenticated') {
-      router.replace('/auth')
-      return
-    }
-    const role = (session?.user as { role?: string } | undefined)?.role
-    router.replace(role === 'high_school' ? '/student/dashboard' : '/home')
-  }, [status, session, router])
-
-  return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
-      <div
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: '50%',
-          border: '3px solid #BDB0F5',
-          borderTopColor: 'transparent',
-          animation: 'kspin 0.8s linear infinite',
-        }}
-      />
-      <style>{`@keyframes kspin { to { transform: rotate(360deg) } }`}</style>
-    </main>
-  )
+  const url = await landingForUser({
+    id: session.user.id,
+    email: session.user.email,
+    role: (session.user as { role?: string | null }).role ?? null,
+  })
+  redirect(url)
 }

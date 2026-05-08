@@ -20,7 +20,12 @@ interface TutorProfileModalProps {
     reasons: string[]
   }
   onClose: () => void
-  onBook: () => void
+  // Omit onBook to render the modal in read-only mode (e.g. when a tutor
+  // is browsing /find-tutors and can't book).
+  onBook?: () => void
+  // Marks the modal as the viewer's own profile so we can swap the booking
+  // CTA for a "this is you" hint instead.
+  isSelf?: boolean
 }
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -64,7 +69,7 @@ function getAvatarColor(userId: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
-export default function TutorProfileModal({ tutor, onClose, onBook }: TutorProfileModalProps) {
+export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: TutorProfileModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -193,11 +198,19 @@ export default function TutorProfileModal({ tutor, onClose, onBook }: TutorProfi
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="modal-book-btn" onClick={onBook}>
-            BOOK NOW
-          </button>
-        </div>
+        {onBook ? (
+          <div className="modal-footer">
+            <button className="modal-book-btn" onClick={onBook}>
+              BOOK NOW
+            </button>
+          </div>
+        ) : isSelf ? (
+          <div className="modal-footer">
+            <div className="modal-self-hint">
+              This is how students see your profile.
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <style jsx>{`
@@ -422,6 +435,12 @@ export default function TutorProfileModal({ tutor, onClose, onBook }: TutorProfi
         }
         .modal-book-btn:active {
           transform: scale(0.97);
+        }
+        .modal-self-hint {
+          text-align: center;
+          font-size: 13px;
+          color: #5A5862;
+          padding: 8px 0;
         }
         @media (max-width: 600px) {
           .modal-backdrop {

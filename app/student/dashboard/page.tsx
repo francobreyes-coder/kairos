@@ -1287,8 +1287,19 @@ function StudentDashboardInner() {
   const [pendingPartnerId, setPendingPartnerId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (status === 'unauthenticated') router.push('/auth')
-  }, [status, router])
+    if (status === 'unauthenticated') {
+      router.push('/auth')
+      return
+    }
+    // Tutors don't get a student dashboard — bounce them through the
+    // server-side router so they end up on /tutor/dashboard (or onboarding).
+    if (status === 'authenticated') {
+      const role = (session?.user as { role?: string | null } | undefined)?.role
+      if (role && role !== 'high_school') {
+        router.replace('/post-login')
+      }
+    }
+  }, [status, session, router])
 
   useEffect(() => {
     if (status !== 'authenticated') return

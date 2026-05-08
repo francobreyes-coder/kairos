@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { rankTutors, type StudentProfile, type TutorProfile } from '@/lib/matching'
+import { findTutorProfile } from '@/lib/tutor-profile'
 
 export async function GET() {
   const session = await auth()
@@ -138,5 +139,17 @@ export async function GET() {
     reasons: m.reasons,
   }))
 
-  return NextResponse.json({ matches })
+  // Tell the client which row in `matches` (if any) belongs to the viewer,
+  // so a tutor visiting /find-tutors sees their own card pinned as the top
+  // match instead of randomly placed.
+  let viewerSelfUserId: string | null = null
+  const { application: viewerApp, profile: viewerProfile } = await findTutorProfile({
+    id: session.user.id,
+    email: session.user.email,
+  })
+  if (viewerApp && viewerProfile?.profile_completed) {
+    viewerSelfUserId = viewerProfile.user_id
+  }
+
+  return NextResponse.json({ matches, viewerSelfUserId })
 }

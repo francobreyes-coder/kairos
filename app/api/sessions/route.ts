@@ -87,6 +87,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Mirror the /api/checkout guard — tutors can't book even via this older
+  // direct-booking path.
+  const viewerRole = (session.user as { role?: string | null }).role ?? null
+  if (viewerRole === 'college') {
+    return NextResponse.json(
+      { error: "Tutors can't book sessions." },
+      { status: 403 },
+    )
+  }
+
   const body = await req.json()
   const { tutorId, dayOfWeek, timeSlot, scheduledDate, notes } = body
 

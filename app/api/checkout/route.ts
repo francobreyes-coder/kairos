@@ -10,6 +10,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Tutors can browse /find-tutors but can't book sessions. Block at the
+  // server even though the UI hides Book Now, so a crafted request can't
+  // open a Stripe checkout.
+  const viewerRole = (session.user as { role?: string | null }).role ?? null
+  if (viewerRole === 'college') {
+    return NextResponse.json(
+      { error: "Tutors can't book sessions." },
+      { status: 403 },
+    )
+  }
+
   const body = await req.json()
   const { tutorId, dayOfWeek, timeSlot, scheduledDate, notes, service } = body
 
