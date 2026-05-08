@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/landing/header'
+import { PayoutsCard } from '@/components/payouts-card'
 import {
   Loader2,
   DollarSign,
@@ -791,6 +792,9 @@ export default function TutorDashboard() {
               sub="average earnings"
             />
           </div>
+
+          {/* Payouts (Stripe Connect) */}
+          <PayoutsCard />
 
           {/* Sessions section */}
           <div className="rounded-2xl border border-border bg-card mb-8">

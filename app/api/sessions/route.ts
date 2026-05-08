@@ -4,6 +4,7 @@ import { getSupabase } from '@/lib/supabase'
 import { sendBookingConfirmationEmail } from '@/lib/email'
 import { createVideoRoom } from '@/lib/daily'
 import { getUserCandidateIds } from '@/lib/user-candidates'
+import { getStripe } from '@/lib/stripe'
 
 // GET /api/sessions — fetch user's sessions (as student or tutor)
 export async function GET() {
@@ -231,7 +232,7 @@ export async function PATCH(req: NextRequest) {
   // Verify the user owns this session
   const { data: existing } = await supabase
     .from('sessions')
-    .select('id, student_id, tutor_id')
+    .select('id, student_id, tutor_id, payment_status, stripe_payment_intent_id')
     .eq('id', sessionId)
     .single()
 
@@ -248,14 +249,43 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
+  // Refund the charge if it was paid. `refund_application_fee: true` pulls
+  // the platform fee back from Kairos as well so the tutor's balance is made
+  // whole. `reverse_transfer: true` pulls the transferred funds back from
+  // the tutor's connected account. If anything fails here we surface the
+  // error rather than silently cancelling — admins can retry once the cause
+  // is fixed.
+  let refunded = false
+  if (existing.payment_status === 'paid' && existing.stripe_payment_intent_id) {
+    try {
+      const stripe = getStripe()
+      await stripe.refunds.create({
+        payment_intent: existing.stripe_payment_intent_id,
+        refund_application_fee: true,
+        reverse_transfer: true,
+      })
+      refunded = true
+    } catch (e) {
+      console.error('Stripe refund failed:', e)
+      return NextResponse.json(
+        { error: 'Could not issue refund — session not cancelled.' },
+        { status: 500 },
+      )
+    }
+  }
+
   const { error } = await supabase
     .from('sessions')
-    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .update({
+      status: 'cancelled',
+      payment_status: refunded ? 'refunded' : existing.payment_status,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', sessionId)
 
   if (error) {
     return NextResponse.json({ error: 'Failed to cancel session' }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, refunded })
 }

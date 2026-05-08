@@ -19,6 +19,17 @@ export async function fulfillCheckoutBooking(
 
   const supabase = getSupabase()
 
+  // payment_intent on a Checkout Session is either a string id or an
+  // expanded object depending on how it was retrieved.
+  const paymentIntentId =
+    typeof checkoutSession.payment_intent === 'string'
+      ? checkoutSession.payment_intent
+      : checkoutSession.payment_intent?.id ?? null
+
+  const applicationFeeAmount = meta.application_fee_cents
+    ? parseInt(meta.application_fee_cents, 10)
+    : null
+
   const { data: inserted, error } = await supabase
     .from('sessions')
     .insert({
@@ -31,6 +42,8 @@ export async function fulfillCheckoutBooking(
       status: 'confirmed',
       price: parseFloat(meta.price || '0'),
       payment_status: 'paid',
+      stripe_payment_intent_id: paymentIntentId,
+      stripe_application_fee_amount: applicationFeeAmount,
     })
     .select()
     .single()

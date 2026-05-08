@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
-import { getStripe } from '@/lib/stripe'
+import { getStripe, platformFeeCents } from '@/lib/stripe'
 
 // POST /api/checkout — create a Stripe Checkout session for booking
 export async function POST(req: NextRequest) {
@@ -26,13 +26,39 @@ export async function POST(req: NextRequest) {
   // Verify tutor exists and has this availability + price
   const { data: tutor } = await supabase
     .from('tutor_profiles')
-    .select('availability, service_prices, services')
+    .select('availability, service_prices, services, stripe_account_id')
     .eq('user_id', tutorId)
     .eq('profile_completed', true)
     .single()
 
   if (!tutor) {
     return NextResponse.json({ error: 'Tutor not found' }, { status: 404 })
+  }
+
+  // Tutor must have completed Stripe Connect onboarding before they can be
+  // booked. Check both that an account id exists and that Stripe says it's
+  // ready to accept charges.
+  if (!tutor.stripe_account_id) {
+    return NextResponse.json(
+      { error: "This tutor hasn't set up payments yet — please try another tutor." },
+      { status: 400 },
+    )
+  }
+  const stripe = getStripe()
+  try {
+    const account = await stripe.accounts.retrieve(tutor.stripe_account_id)
+    if (!account.charges_enabled) {
+      return NextResponse.json(
+        { error: "This tutor hasn't finished setting up payments yet — please try another tutor." },
+        { status: 400 },
+      )
+    }
+  } catch (e) {
+    console.error('Failed to retrieve tutor Stripe account:', e)
+    return NextResponse.json(
+      { error: "Couldn't verify the tutor's payment setup — please try again." },
+      { status: 500 },
+    )
   }
 
   // Validate availability
@@ -150,8 +176,9 @@ export async function POST(req: NextRequest) {
   // Derive baseUrl from the request so Stripe always redirects back to the
   // origin the user is actually on — independent of how NEXTAUTH_URL is set
   // in the deploy environment. Falls back to env only if origin is missing.
-  const stripe = getStripe()
   const baseUrl = req.nextUrl.origin || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+
+  const applicationFee = platformFeeCents(price)
 
   const checkoutSession = await stripe.checkout.sessions.create({
     mode: 'payment',
@@ -168,6 +195,12 @@ export async function POST(req: NextRequest) {
         quantity: 1,
       },
     ],
+    payment_intent_data: {
+      application_fee_amount: applicationFee,
+      transfer_data: {
+        destination: tutor.stripe_account_id,
+      },
+    },
     metadata: {
       student_id: session.user.id,
       tutor_id: resolvedTutorId,
@@ -177,6 +210,7 @@ export async function POST(req: NextRequest) {
       notes: notes || '',
       service,
       price: String(price),
+      application_fee_cents: String(applicationFee),
     },
     success_url: `${baseUrl}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/booking/cancel`,
