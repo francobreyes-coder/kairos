@@ -150,7 +150,9 @@ const emptyForm: FormState = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function ApplyPage() {
-  const { data: session } = useSession()
+  const { data: session, status: sessionStatus } = useSession()
+  const userRole = session?.user?.role ?? null
+  const isCollege = userRole === 'college'
   const [form, setForm] = useState<FormState>(emptyForm)
   const [files, setFiles] = useState<{ video: File | null; resume: File | null; proof: File | null }>({
     video: null, resume: null, proof: null,
@@ -163,6 +165,7 @@ export default function ApplyPage() {
   })
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [draftLoaded, setDraftLoaded] = useState(false)
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -284,7 +287,8 @@ export default function ApplyPage() {
     e.preventDefault()
     if (progress < 100) return
     setSubmitting(true)
-    await submitApplication({
+    setSubmitError(null)
+    const result = await submitApplication({
       name: form.name,
       email: form.email.trim(),
       dob: form.dob,
@@ -301,8 +305,12 @@ export default function ApplyPage() {
       resumeFilename: savedFiles.resume?.filename ?? files.resume?.name ?? '',
       proofFilename: savedFiles.proof?.filename ?? files.proof?.name ?? '',
     })
-    setSubmitted(true)
     setSubmitting(false)
+    if (result.success) {
+      setSubmitted(true)
+    } else {
+      setSubmitError(result.error ?? 'Something went wrong. Please try again.')
+    }
   }
 
   if (submitted) {
@@ -324,6 +332,56 @@ export default function ApplyPage() {
             >
               Back to Home <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+        </main>
+      </>
+    )
+  }
+
+  if (sessionStatus === 'loading') {
+    return (
+      <>
+        <Header />
+        <main className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </main>
+      </>
+    )
+  }
+
+  if (!session?.user || !isCollege) {
+    const signedIn = !!session?.user
+    return (
+      <>
+        <Header />
+        <main className="min-h-screen flex items-center justify-center px-6 pt-28 pb-20">
+          <div className="max-w-md w-full text-center">
+            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-6">
+              <ArrowRight className="w-8 h-8 text-accent" />
+            </div>
+            <h1 className="text-2xl font-semibold text-foreground mb-3">
+              {signedIn ? 'College students only' : 'Sign in to apply'}
+            </h1>
+            <p className="text-muted-foreground mb-8">
+              {signedIn
+                ? "Tutor applications are open to current college students only. The account you're signed into is registered as a high school student, so it can't submit a tutor application."
+                : 'You need to sign in with a college student account to apply as a tutor.'}
+            </p>
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/auth"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                {signedIn ? 'Sign in with a college account' : 'Sign in or sign up'}
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/home"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors mt-2"
+              >
+                Back to home
+              </Link>
+            </div>
           </div>
         </main>
       </>
@@ -365,14 +423,6 @@ export default function ApplyPage() {
             <p className="mt-2 text-muted-foreground">
               Share your background and help the next generation of students reach their dream schools.
             </p>
-            {!session?.user && (
-              <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-purple-600/10 border border-purple-600/20">
-                <span className="text-sm text-foreground">
-                  <Link href="/auth" className="text-purple-600 font-medium hover:underline">Sign in</Link>
-                  {' '}to save your progress and resume later.
-                </span>
-              </div>
-            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -628,6 +678,11 @@ export default function ApplyPage() {
               {progress < 100 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Complete all required fields to submit ({progress}% done).
+                </p>
+              )}
+              {submitError && (
+                <p className="text-sm text-destructive text-center mt-3">
+                  {submitError}
                 </p>
               )}
             </div>

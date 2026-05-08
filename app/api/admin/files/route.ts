@@ -67,13 +67,6 @@ export async function GET(req: Request) {
     }
   }
 
-  if (candidateIds.size === 0) {
-    return NextResponse.json(
-      { error: 'No user_id on application — file cannot be located.' },
-      { status: 404 },
-    )
-  }
-
   for (const candidateId of candidateIds) {
     const path = `${candidateId}/${fileType}_${filename}`
     const { data, error } = await supabase.storage
@@ -84,11 +77,42 @@ export async function GET(req: Request) {
     }
   }
 
+  // Brute-force fallback: list user folders in the bucket and probe each
+  // for a matching file. Only run when the normal candidate lookup failed,
+  // since this is O(n) over folders. Capped at 500 folders.
+  const triedPaths = new Set<string>(
+    Array.from(candidateIds).map((id) => `${id}/${fileType}_${filename}`),
+  )
+  let bruteFound: { url: string; path: string } | null = null
+
+  const { data: folders } = await supabase.storage
+    .from('application-files')
+    .list('', { limit: 500 })
+
+  for (const folder of folders ?? []) {
+    if (!folder.name || folder.name === '.emptyFolderPlaceholder') continue
+    const path = `${folder.name}/${fileType}_${filename}`
+    if (triedPaths.has(path)) continue
+    triedPaths.add(path)
+    const { data, error } = await supabase.storage
+      .from('application-files')
+      .createSignedUrl(path, 3600)
+    if (!error && data?.signedUrl) {
+      bruteFound = { url: data.signedUrl, path }
+      break
+    }
+  }
+
+  if (bruteFound) {
+    return NextResponse.json(bruteFound)
+  }
+
+  const reason = candidateIds.size === 0
+    ? 'Application has no user_id or email recorded. Uploads only happen when the applicant is signed in, so the file may never have reached storage.'
+    : 'File not found in storage at any known path. The applicant may not have completed the upload.'
+
   return NextResponse.json(
-    {
-      error: 'File not found in storage. The applicant may not have completed the upload.',
-      tried: Array.from(candidateIds).map((id) => `${id}/${fileType}_${filename}`),
-    },
+    { error: reason, tried: Array.from(triedPaths) },
     { status: 404 },
   )
 }
