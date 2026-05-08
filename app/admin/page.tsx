@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save, AlertCircle } from 'lucide-react'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
@@ -62,50 +62,76 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function FileLink({ label, filename, userId, fileType, icon: Icon }: {
+function FileLink({ label, filename, applicationId, fileType, icon: Icon }: {
   label: string
   filename: string
-  userId: string | null
+  applicationId: string
   fileType: string
   icon: typeof FileText
 }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  if (!filename || !userId) return null
+  if (!filename) {
+    return (
+      <div className="flex items-center gap-3 w-full p-3 rounded-lg bg-secondary/30 text-left">
+        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-muted-foreground truncate">{label}</p>
+          <p className="text-xs text-muted-foreground italic">Not uploaded</p>
+        </div>
+      </div>
+    )
+  }
 
   async function openFile() {
     setLoading(true)
+    setError(null)
     try {
-      const params = new URLSearchParams({ userId: userId!, filename, fileType })
+      const params = new URLSearchParams({ applicationId, fileType })
       const res = await fetch(`/api/admin/files?${params}`)
       const data = await res.json()
-      if (data.url) {
+      if (res.ok && data.url) {
         window.open(data.url, '_blank')
+      } else {
+        setError(data.error ?? 'Could not retrieve file')
       }
+    } catch {
+      setError('Network error')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <button
-      onClick={openFile}
-      disabled={loading}
-      className="flex items-center gap-3 w-full p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-left group"
-    >
-      <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-purple-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{label}</p>
-        <p className="text-xs text-muted-foreground truncate">{filename}</p>
-      </div>
-      {loading ? (
-        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
-      ) : (
-        <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground flex-shrink-0" />
+    <div>
+      <button
+        onClick={openFile}
+        disabled={loading}
+        className="flex items-center gap-3 w-full p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-left group"
+      >
+        <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-purple-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{label}</p>
+          <p className="text-xs text-muted-foreground truncate">{filename}</p>
+        </div>
+        {loading ? (
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+        ) : (
+          <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground flex-shrink-0" />
+        )}
+      </button>
+      {error && (
+        <div className="mt-1.5 flex items-start gap-1.5 px-3 text-xs text-red-600">
+          <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -395,21 +421,21 @@ export default function AdminPage() {
                 <FileLink
                   label="Video Introduction"
                   filename={selected.video_filename}
-                  userId={selected.user_id}
+                  applicationId={selected.id}
                   fileType="video"
                   icon={Video}
                 />
                 <FileLink
                   label="Resume"
                   filename={selected.resume_filename}
-                  userId={selected.user_id}
+                  applicationId={selected.id}
                   fileType="resume"
                   icon={FileText}
                 />
                 <FileLink
                   label="Proof of Admission"
                   filename={selected.proof_filename}
-                  userId={selected.user_id}
+                  applicationId={selected.id}
                   fileType="proof"
                   icon={ImageIcon}
                 />
