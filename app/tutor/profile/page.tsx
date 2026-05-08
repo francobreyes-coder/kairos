@@ -89,7 +89,7 @@ interface ProfileData {
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
 
-type Section = 'photo' | 'bio' | 'academic' | 'interests' | 'services' | 'availability' | null
+type Section = 'photo' | 'name' | 'bio' | 'academic' | 'interests' | 'services' | 'availability' | null
 
 export default function ProfileDashboard() {
   const { data: session, status } = useSession()
@@ -102,6 +102,8 @@ export default function ProfileDashboard() {
   const [editing, setEditing] = useState<Section>(null)
   const [approvedServices, setApprovedServices] = useState<string[]>([])
   const [tutorName, setTutorName] = useState('')
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
 
@@ -170,6 +172,28 @@ export default function ProfileDashboard() {
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  async function saveName() {
+    const trimmed = nameDraft.trim()
+    if (!trimmed) return
+    if (trimmed === tutorName) {
+      setEditing(null)
+      return
+    }
+    setSavingName(true)
+    const res = await fetch('/api/tutor/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed }),
+    })
+    setSavingName(false)
+    if (res.ok) {
+      setTutorName(trimmed)
+      setEditing(null)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
   }
 
   function updateDraft<K extends keyof ProfileData>(key: K, value: ProfileData[K]) {
@@ -358,6 +382,29 @@ export default function ProfileDashboard() {
                 />
               )}
             </div>
+
+            {/* Name */}
+            <DashboardCard
+              icon={User}
+              title="Display Name"
+              editing={editing === 'name'}
+              onEdit={() => { setEditing('name'); setNameDraft(tutorName); setSaved(false) }}
+              onCancel={() => { setEditing(null); setNameDraft(tutorName) }}
+              onSave={saveName}
+              saving={savingName}
+            >
+              {editing === 'name' ? (
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  placeholder="Your full name"
+                  className={inputCls}
+                />
+              ) : (
+                <p className="text-sm text-foreground">{tutorName || '—'}</p>
+              )}
+            </DashboardCard>
 
             {/* Bio */}
             <DashboardCard

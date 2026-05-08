@@ -40,7 +40,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { id, action, services_approved, denial_reason } = await req.json()
+  const { id, action, services_approved, denial_reason, name } = await req.json()
   if (!id || !action) {
     return NextResponse.json({ error: 'Missing id or action' }, { status: 400 })
   }
@@ -95,6 +95,27 @@ export async function PATCH(req: Request) {
       .from('tutor_applications')
       .update({
         services_approved: services_approved ?? [],
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'update_name') {
+    const trimmed = (name ?? '').toString().trim()
+    if (!trimmed) {
+      return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('tutor_applications')
+      .update({
+        name: trimmed,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

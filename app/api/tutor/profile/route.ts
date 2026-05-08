@@ -101,6 +101,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No approved application found' }, { status: 403 })
   }
 
+  if (typeof body.name === 'string') {
+    const trimmed = body.name.trim()
+    if (trimmed) {
+      await supabase
+        .from('tutor_applications')
+        .update({ name: trimmed, updated_at: new Date().toISOString() })
+        .eq('id', application.id)
+    }
+  }
+
   // Determine which user_id the profile actually lives under.
   // If the user logged in with a different account than they applied with,
   // their profile row uses the original user_id — update that row, not a new one.

@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
+import TutorProfileModal from '@/components/tutor-profile-modal'
 import { StudentSidebar, type SidebarItemId } from '@/components/student-sidebar'
 
 interface TutorMatch {
@@ -107,6 +108,7 @@ export default function FindTutorsPage() {
     services: string[]
     servicePrices: Record<string, number>
   } | null>(null)
+  const [profileTutor, setProfileTutor] = useState<TutorMatch | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -363,6 +365,15 @@ export default function FindTutorsPage() {
                   key={tutor.userId}
                   className={`tcard ${isFeatured ? 'featured' : ''}`}
                   style={{ animationDelay: `${idx * 0.05}s` }}
+                  onClick={() => setProfileTutor(tutor)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setProfileTutor(tutor)
+                    }
+                  }}
                 >
                   {isFeatured && (
                     <div className="featured-badge">
@@ -443,14 +454,15 @@ export default function FindTutorsPage() {
                   {/* Book Now */}
                   <button
                     className="btn-book"
-                    onClick={() =>
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setBookingTutor({
                         id: tutor.userId,
                         name: tutor.name,
                         services: tutor.services,
                         servicePrices: tutor.servicePrices,
                       })
-                    }
+                    }}
                   >
                     BOOK NOW
                   </button>
@@ -469,6 +481,22 @@ export default function FindTutorsPage() {
           servicePrices={bookingTutor.servicePrices}
           onClose={() => setBookingTutor(null)}
           onBooked={() => setBookingTutor(null)}
+        />
+      )}
+
+      {profileTutor && (
+        <TutorProfileModal
+          tutor={profileTutor}
+          onClose={() => setProfileTutor(null)}
+          onBook={() => {
+            setBookingTutor({
+              id: profileTutor.userId,
+              name: profileTutor.name,
+              services: profileTutor.services,
+              servicePrices: profileTutor.servicePrices,
+            })
+            setProfileTutor(null)
+          }}
         />
       )}
 

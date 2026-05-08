@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save } from 'lucide-react'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
@@ -120,6 +120,9 @@ export default function AdminPage() {
   const [approvedServices, setApprovedServices] = useState<string[]>([])
   const [denialReason, setDenialReason] = useState('')
   const [showDenyForm, setShowDenyForm] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
 
   const isAdmin = session?.user?.email === ADMIN_EMAIL
 
@@ -145,6 +148,35 @@ export default function AdminPage() {
     setApprovedServices(app.services_approved ?? app.services_applied ?? [])
     setDenialReason('')
     setShowDenyForm(false)
+    setEditingName(false)
+    setNameDraft(app.name)
+  }
+
+  async function handleSaveName() {
+    if (!selected) return
+    const trimmed = nameDraft.trim()
+    if (!trimmed || trimmed === selected.name) {
+      setEditingName(false)
+      return
+    }
+    setSavingName(true)
+    const res = await fetch('/api/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: selected.id,
+        action: 'update_name',
+        name: trimmed,
+      }),
+    })
+    setSavingName(false)
+    if (res.ok) {
+      setSelected((prev) => prev ? { ...prev, name: trimmed } : null)
+      setApplications((prev) =>
+        prev.map((a) => (a.id === selected.id ? { ...a, name: trimmed } : a))
+      )
+      setEditingName(false)
+    }
   }
 
   async function handleApprove() {
@@ -236,9 +268,48 @@ export default function AdminPage() {
             <ChevronLeft className="w-4 h-4" /> Back to list
           </button>
 
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-semibold text-foreground">{selected.name}</h1>
+          <div className="flex items-start justify-between mb-6 gap-4">
+            <div className="flex-1 min-w-0">
+              {editingName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName()
+                      if (e.key === 'Escape') { setEditingName(false); setNameDraft(selected.name) }
+                    }}
+                    className="text-2xl font-semibold text-foreground bg-card border border-border rounded-lg px-3 py-1 outline-none focus:ring-2 focus:ring-purple-500/30 transition w-full"
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={savingName || !nameDraft.trim()}
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-purple-600 text-white text-xs font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    {savingName ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setEditingName(false); setNameDraft(selected.name) }}
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex-shrink-0"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-semibold text-foreground">{selected.name}</h1>
+                  <button
+                    onClick={() => { setEditingName(true); setNameDraft(selected.name) }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    title="Edit name"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
               <p className="text-sm text-muted-foreground mt-1">{selected.email}</p>
             </div>
             <StatusBadge status={selected.application_status} />
