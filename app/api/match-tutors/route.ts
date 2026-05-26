@@ -33,9 +33,13 @@ export async function GET() {
     return NextResponse.json({ matches: [] })
   }
 
-  // Fetch tutor names — try multiple sources to handle user_id mismatches
-  // (e.g. tutor applied with credentials but completed profile with Google)
+  // Identify which tutor_profiles correspond to an APPROVED application, so
+  // suspended/banned tutors are filtered out of /find-tutors entirely.
+  // Application user_id may not match profile user_id (e.g. tutor applied
+  // with credentials but completed their profile after a Google sign-in),
+  // so we also reconcile by email via the users table.
   const tutorUserIds = tutors.map((t) => t.user_id)
+  const approvedTutorIds = new Set<string>()
   const nameMap = new Map<string, string>()
 
   // 1. Direct user_id match on approved applications
@@ -47,31 +51,26 @@ export async function GET() {
 
   if (applications) {
     for (const app of applications) {
-      nameMap.set(app.user_id, app.name)
+      approvedTutorIds.add(app.user_id)
+      if (app.name) nameMap.set(app.user_id, app.name)
     }
   }
 
-  // 2. For tutors still missing names, try email-based lookup via users table
-  const missingIds = tutorUserIds.filter((id) => !nameMap.has(id))
-  if (missingIds.length > 0) {
+  // 2. Reconcile id drift: for any profile not yet approved, look up the
+  // owning user's email and see if an approved application exists under it.
+  const unmatched = tutorUserIds.filter((id) => !approvedTutorIds.has(id))
+  if (unmatched.length > 0) {
     const { data: users } = await supabase
       .from('users')
-      .select('id, email, name')
-      .in('id', missingIds)
+      .select('id, email')
+      .in('id', unmatched)
 
     if (users) {
       const emailToUserId = new Map<string, string>()
       for (const u of users) {
-        // Use the users table name as a fallback
-        if (u.name && !nameMap.has(u.id)) {
-          nameMap.set(u.id, u.name)
-        }
-        if (u.email) {
-          emailToUserId.set(u.email, u.id)
-        }
+        if (u.email) emailToUserId.set(u.email, u.id)
       }
 
-      // Also try matching applications by email for name resolution
       if (emailToUserId.size > 0) {
         const emails = Array.from(emailToUserId.keys())
         const { data: appsByEmail } = await supabase
@@ -83,13 +82,21 @@ export async function GET() {
         if (appsByEmail) {
           for (const app of appsByEmail) {
             const userId = emailToUserId.get(app.email)
-            if (userId && app.name) {
-              nameMap.set(userId, app.name)
+            if (userId) {
+              approvedTutorIds.add(userId)
+              if (app.name) nameMap.set(userId, app.name)
             }
           }
         }
       }
     }
+  }
+
+  // Drop suspended/banned (and any other non-approved) tutors before ranking.
+  const approvedTutors = tutors.filter((t) => approvedTutorIds.has(t.user_id))
+
+  if (approvedTutors.length === 0) {
+    return NextResponse.json({ matches: [], viewerSelfUserId: null })
   }
 
   const studentProfile: StudentProfile = {
@@ -121,7 +128,7 @@ export async function GET() {
     }
   }
 
-  const ranked = rankTutors(studentProfile, tutors as TutorProfile[], bookedTutorProfiles)
+  const ranked = rankTutors(studentProfile, approvedTutors as TutorProfile[], bookedTutorProfiles)
 
   const matches = ranked.map((m) => ({
     userId: m.tutor.user_id,
