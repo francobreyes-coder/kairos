@@ -14,27 +14,33 @@ export async function landingForUser(opts: {
 
   const supabase = getSupabase()
 
-  // Look up an approved application by id first, then by email — tutors who
-  // applied via credentials and later signed in with Google end up keyed
-  // under a different users.id, so the email fallback heals that drift.
-  let app: { user_id: string } | null = null
+  // Look up an application by id first, then by email — tutors who applied
+  // via credentials and later signed in with Google end up keyed under a
+  // different users.id, so the email fallback heals that drift. We pull the
+  // status here so suspended/banned tutors can be routed to an explainer
+  // page instead of silently demoted to /home.
+  let app: { user_id: string; application_status: string } | null = null
 
   const { data: appById } = await supabase
     .from('tutor_applications')
-    .select('user_id')
+    .select('user_id, application_status')
     .eq('user_id', id)
-    .eq('application_status', 'approved')
+    .in('application_status', ['approved', 'suspended', 'banned'])
     .maybeSingle()
   if (appById) app = appById
 
   if (!app && email) {
     const { data: appByEmail } = await supabase
       .from('tutor_applications')
-      .select('user_id')
+      .select('user_id, application_status')
       .eq('email', email)
-      .eq('application_status', 'approved')
+      .in('application_status', ['approved', 'suspended', 'banned'])
       .maybeSingle()
     if (appByEmail) app = appByEmail
+  }
+
+  if (app && (app.application_status === 'suspended' || app.application_status === 'banned')) {
+    return '/tutor/suspended'
   }
 
   if (app) {

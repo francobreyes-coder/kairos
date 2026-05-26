@@ -13,6 +13,35 @@ export async function GET() {
   const supabase = getSupabase()
   const userId = session.user.id
 
+  // Surface suspended / banned tutors with a specific signal so the dashboard
+  // page can redirect them to the explainer instead of showing "profile not
+  // found". Check by both id and email to handle credentials/Google drift.
+  let inactiveStatus: string | null = null
+  const { data: statusById } = await supabase
+    .from('tutor_applications')
+    .select('application_status')
+    .eq('user_id', userId)
+    .in('application_status', ['suspended', 'banned'])
+    .maybeSingle()
+  if (statusById) inactiveStatus = statusById.application_status as string
+
+  if (!inactiveStatus && session.user.email) {
+    const { data: statusByEmail } = await supabase
+      .from('tutor_applications')
+      .select('application_status')
+      .eq('email', session.user.email)
+      .in('application_status', ['suspended', 'banned'])
+      .maybeSingle()
+    if (statusByEmail) inactiveStatus = statusByEmail.application_status as string
+  }
+
+  if (inactiveStatus) {
+    return NextResponse.json(
+      { error: 'Account inactive', status: inactiveStatus },
+      { status: 403 },
+    )
+  }
+
   // Try by user_id first, then fall back to email-based lookup
   // (handles cases where user has multiple accounts, e.g. Google + credentials)
   let { data: profile } = await supabase

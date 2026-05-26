@@ -578,8 +578,15 @@ export default function TutorDashboard() {
   function fetchDashboard() {
     setLoading(true)
     fetch('/api/tutor/dashboard')
-      .then((r) => {
+      .then(async (r) => {
         if (!r.ok) {
+          if (r.status === 403) {
+            const body = await r.json().catch(() => null)
+            if (body?.status === 'suspended' || body?.status === 'banned') {
+              router.replace('/tutor/suspended')
+              throw new Error('INACTIVE')
+            }
+          }
           if (r.status === 404) throw new Error('NO_PROFILE')
           throw new Error('Failed to load dashboard')
         }
@@ -591,7 +598,9 @@ export default function TutorDashboard() {
         setUpcoming(data.upcoming)
         setPast(data.past)
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (err.message !== 'INACTIVE') setError(err.message)
+      })
       .finally(() => setLoading(false))
   }
 
