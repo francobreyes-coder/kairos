@@ -90,6 +90,27 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
+  if (action === 'suspend' || action === 'ban' || action === 'reinstate') {
+    const nextStatus =
+      action === 'suspend' ? 'suspended'
+      : action === 'ban' ? 'banned'
+      : 'approved'
+
+    const { error } = await supabase
+      .from('tutor_applications')
+      .update({
+        application_status: nextStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
   if (action === 'update_services') {
     const { error } = await supabase
       .from('tutor_applications')

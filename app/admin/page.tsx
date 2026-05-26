@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save, AlertCircle } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save, AlertCircle, PauseCircle, Ban, RotateCcw } from 'lucide-react'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
@@ -33,7 +33,7 @@ interface Application {
   video_filename: string
   resume_filename: string
   proof_filename: string
-  application_status: 'pending' | 'approved' | 'denied'
+  application_status: 'pending' | 'approved' | 'denied' | 'suspended' | 'banned'
   denial_reason: string | null
   created_at: string
 }
@@ -43,6 +43,8 @@ function StatusBadge({ status }: { status: string }) {
     pending: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
     approved: 'bg-green-500/10 text-green-600 border-green-500/20',
     denied: 'bg-red-500/10 text-red-600 border-red-500/20',
+    suspended: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
+    banned: 'bg-zinc-700/10 text-zinc-700 border-zinc-700/30',
   }[status] ?? 'bg-gray-500/10 text-gray-600 border-gray-500/20'
 
   return (
@@ -142,7 +144,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Application | null>(null)
   const [acting, setActing] = useState(false)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'denied'>('pending')
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'denied' | 'suspended' | 'banned'>('pending')
+  const [confirmAction, setConfirmAction] = useState<null | 'suspend' | 'ban' | 'reinstate'>(null)
   const [approvedServices, setApprovedServices] = useState<string[]>([])
   const [denialReason, setDenialReason] = useState('')
   const [showDenyForm, setShowDenyForm] = useState(false)
@@ -176,6 +179,7 @@ export default function AdminPage() {
     setShowDenyForm(false)
     setEditingName(false)
     setNameDraft(app.name)
+    setConfirmAction(null)
   }
 
   async function handleSaveName() {
@@ -241,6 +245,26 @@ export default function AdminPage() {
     fetchApplications()
   }
 
+  async function handleStatusChange(action: 'suspend' | 'ban' | 'reinstate') {
+    if (!selected) return
+    setActing(true)
+    const res = await fetch('/api/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selected.id, action }),
+    })
+    setActing(false)
+    setConfirmAction(null)
+    if (res.ok) {
+      const nextStatus =
+        action === 'suspend' ? 'suspended'
+        : action === 'ban' ? 'banned'
+        : 'approved'
+      setSelected((prev) => prev ? { ...prev, application_status: nextStatus } : null)
+      fetchApplications()
+    }
+  }
+
   async function handleUpdateServices() {
     if (!selected) return
     setActing(true)
@@ -280,6 +304,8 @@ export default function AdminPage() {
     all: applications.length,
     pending: applications.filter((a) => a.application_status === 'pending').length,
     approved: applications.filter((a) => a.application_status === 'approved').length,
+    suspended: applications.filter((a) => a.application_status === 'suspended').length,
+    banned: applications.filter((a) => a.application_status === 'banned').length,
     denied: applications.filter((a) => a.application_status === 'denied').length,
   }
 
@@ -288,7 +314,7 @@ export default function AdminPage() {
       <main className="min-h-screen bg-background">
         <div className="mx-auto max-w-3xl px-6 py-8">
           <button
-            onClick={() => { setSelected(null); setShowDenyForm(false); setDenialReason('') }}
+            onClick={() => { setSelected(null); setShowDenyForm(false); setDenialReason(''); setConfirmAction(null) }}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
           >
             <ChevronLeft className="w-4 h-4" /> Back to list
@@ -449,6 +475,106 @@ export default function AdminPage() {
               </div>
             )}
 
+            {(selected.application_status === 'approved' || selected.application_status === 'suspended' || selected.application_status === 'banned') && (
+              <div className="space-y-4 pt-2">
+                {confirmAction ? (
+                  <div className={`rounded-2xl bg-card border p-6 space-y-4 ${
+                    confirmAction === 'ban' ? 'border-red-500/30' :
+                    confirmAction === 'suspend' ? 'border-orange-500/30' :
+                    'border-green-500/30'
+                  }`}>
+                    <h2 className={`text-sm font-semibold ${
+                      confirmAction === 'ban' ? 'text-red-600' :
+                      confirmAction === 'suspend' ? 'text-orange-600' :
+                      'text-green-600'
+                    }`}>
+                      {confirmAction === 'ban' ? 'Ban this tutor?' :
+                       confirmAction === 'suspend' ? 'Suspend this tutor?' :
+                       'Reinstate this tutor?'}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {confirmAction === 'ban'
+                        ? 'They will be permanently removed from tutor matching, bookings, and messaging. Existing sessions remain visible to students but the tutor loses access to their dashboard.'
+                        : confirmAction === 'suspend'
+                        ? 'They will be hidden from tutor matching and unable to take new bookings. Suspension is reversible — you can reinstate them anytime.'
+                        : 'They will be restored to active approved status and become visible to students again.'}
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleStatusChange(confirmAction)}
+                        disabled={acting}
+                        className={`flex-1 h-10 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2 ${
+                          confirmAction === 'ban' ? 'bg-red-600 hover:bg-red-700' :
+                          confirmAction === 'suspend' ? 'bg-orange-600 hover:bg-orange-700' :
+                          'bg-green-600 hover:bg-green-700'
+                        }`}
+                      >
+                        {acting ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                         confirmAction === 'ban' ? <Ban className="w-4 h-4" /> :
+                         confirmAction === 'suspend' ? <PauseCircle className="w-4 h-4" /> :
+                         <RotateCcw className="w-4 h-4" />}
+                        Confirm {confirmAction.charAt(0).toUpperCase() + confirmAction.slice(1)}
+                      </button>
+                      <button
+                        onClick={() => setConfirmAction(null)}
+                        className="px-4 h-10 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-3">
+                    {selected.application_status === 'approved' && (
+                      <>
+                        <button
+                          onClick={() => setConfirmAction('suspend')}
+                          className="flex-1 min-w-[140px] h-12 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 transition-colors inline-flex items-center justify-center gap-2"
+                        >
+                          <PauseCircle className="w-4 h-4" />
+                          Suspend
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction('ban')}
+                          className="flex-1 min-w-[140px] h-12 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors inline-flex items-center justify-center gap-2"
+                        >
+                          <Ban className="w-4 h-4" />
+                          Ban
+                        </button>
+                      </>
+                    )}
+                    {selected.application_status === 'suspended' && (
+                      <>
+                        <button
+                          onClick={() => setConfirmAction('reinstate')}
+                          className="flex-1 min-w-[140px] h-12 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors inline-flex items-center justify-center gap-2"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          Reinstate
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction('ban')}
+                          className="flex-1 min-w-[140px] h-12 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors inline-flex items-center justify-center gap-2"
+                        >
+                          <Ban className="w-4 h-4" />
+                          Ban
+                        </button>
+                      </>
+                    )}
+                    {selected.application_status === 'banned' && (
+                      <button
+                        onClick={() => setConfirmAction('reinstate')}
+                        className="flex-1 min-w-[140px] h-12 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors inline-flex items-center justify-center gap-2"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Reinstate
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {selected.application_status === 'pending' && (
               <div className="space-y-4 pt-2">
                 {showDenyForm ? (
@@ -522,8 +648,8 @@ export default function AdminPage() {
           <h1 className="text-2xl font-semibold text-foreground">Admin Dashboard</h1>
         </div>
 
-        <div className="flex gap-2 mb-6">
-          {(['all', 'pending', 'approved', 'denied'] as const).map((f) => (
+        <div className="flex flex-wrap gap-2 mb-6">
+          {(['all', 'pending', 'approved', 'suspended', 'banned', 'denied'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
