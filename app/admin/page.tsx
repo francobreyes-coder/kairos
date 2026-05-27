@@ -29,6 +29,7 @@ interface Application {
   services_applied: string[]
   services_approved: string[]
   sat_score: string
+  prior_sat_act_tutoring: string
   passion: string
   why_kairos: string
   video_filename: string
@@ -384,6 +385,7 @@ export default function AdminPage() {
                 <DetailRow label="Graduation Year" value={selected.graduation_year} />
                 <DetailRow label="Major" value={selected.major} />
                 <DetailRow label="SAT/ACT Score" value={selected.sat_score} />
+                <DetailRow label="Prior SAT/ACT Tutoring" value={selected.prior_sat_act_tutoring === 'yes' ? 'Yes' : selected.prior_sat_act_tutoring === 'no' ? 'No' : ''} />
                 <div className="col-span-2">
                   <DetailRow label="College Acceptances" value={selected.college_acceptances} />
                 </div>

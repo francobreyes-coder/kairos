@@ -45,6 +45,7 @@ export async function submitApplication(data: {
   satScore: string
   passion: string
   whyKairos: string
+  priorSatActTutoring: string
   videoFilename: string
   resumeFilename: string
   proofFilename: string
@@ -91,6 +92,7 @@ export async function submitApplication(data: {
       sat_score: data.satScore,
       passion: data.passion,
       why_kairos: data.whyKairos,
+      prior_sat_act_tutoring: data.priorSatActTutoring,
       video_filename: data.videoFilename,
       resume_filename: data.resumeFilename,
       proof_filename: data.proofFilename,
