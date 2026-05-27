@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { getUserCandidateIds } from '@/lib/user-candidates'
+import { expandLegacyServiceIds, expandLegacyServicePrices } from '@/lib/services'
 
 // GET /api/tutor/dashboard — fetch all data needed for the tutor dashboard
 export async function GET() {
@@ -180,6 +181,8 @@ export async function GET() {
   return NextResponse.json({
     profile: {
       ...profile,
+      services: expandLegacyServiceIds(profile.services as string[] | null),
+      service_prices: expandLegacyServicePrices(profile.service_prices as Record<string, number> | null),
       name: app?.name ?? session.user.name ?? 'Tutor',
       profile_photo: profile.profile_photo
         ? `/api/storage?path=${encodeURIComponent(profile.profile_photo)}`

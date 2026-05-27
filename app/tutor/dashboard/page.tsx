@@ -33,7 +33,8 @@ import {
 
 const SERVICE_OPTIONS = [
   { id: 'essays', label: 'Essay Writing', defaultPrice: 50, description: 'College application essays, personal statements, supplements' },
-  { id: 'sat-act', label: 'SAT/ACT Prep', defaultPrice: 65, description: 'Test prep sessions, practice tests, strategy coaching' },
+  { id: 'sat', label: 'SAT Prep', defaultPrice: 65, description: 'SAT test prep sessions, practice tests, strategy coaching' },
+  { id: 'act', label: 'ACT Prep', defaultPrice: 65, description: 'ACT test prep sessions, practice tests, strategy coaching' },
   { id: 'activities', label: 'Activities List Building', defaultPrice: 45, description: 'Extracurricular planning, resume building, activity curation' },
 ]
 

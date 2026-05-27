@@ -36,8 +36,11 @@ interface TutorMatch {
 
 const SERVICE_LABELS: Record<string, string> = {
   essays: 'Essay Writing',
-  'sat-act': 'SAT/ACT Prep',
+  sat: 'SAT Prep',
+  act: 'ACT Prep',
   activities: 'Activities',
+  // Legacy fallback for any 'sat-act' values not yet expanded upstream.
+  'sat-act': 'SAT/ACT Prep',
 }
 
 const TEACHING_STYLE_LABELS: Record<string, string> = {

@@ -178,9 +178,11 @@ export async function POST(req: NextRequest) {
   const tutorName = tutorApp?.name ?? 'Tutor'
 
   const SERVICE_LABELS: Record<string, string> = {
-    'essays': 'Essay Writing',
+    essays: 'Essay Writing',
+    sat: 'SAT Prep',
+    act: 'ACT Prep',
+    activities: 'Activities',
     'sat-act': 'SAT/ACT Prep',
-    'activities': 'Activities',
   }
 
   // Create Stripe Checkout session.

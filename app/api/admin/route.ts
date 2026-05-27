@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { sendApprovalEmail, sendDenialEmail } from '@/lib/email'
+import { expandLegacyServiceIds } from '@/lib/services'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
 const SERVICE_LABELS: Record<string, string> = {
   essays: 'Essay Writing',
-  'sat-act': 'SAT/ACT Prep',
+  sat: 'SAT Prep',
+  act: 'ACT Prep',
   activities: 'Activities List Building',
+  'sat-act': 'SAT/ACT Prep',
 }
 
 async function checkAdmin() {
@@ -32,7 +35,13 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ applications: data })
+  const applications = (data ?? []).map((app) => ({
+    ...app,
+    services_applied: expandLegacyServiceIds(app.services_applied),
+    services_approved: expandLegacyServiceIds(app.services_approved),
+  }))
+
+  return NextResponse.json({ applications })
 }
 
 export async function PATCH(req: Request) {

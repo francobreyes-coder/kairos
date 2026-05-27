@@ -30,8 +30,10 @@ interface TutorProfileModalProps {
 
 const SERVICE_LABELS: Record<string, string> = {
   essays: 'Essay Writing',
-  'sat-act': 'SAT/ACT Prep',
+  sat: 'SAT Prep',
+  act: 'ACT Prep',
   activities: 'Activities List Building',
+  'sat-act': 'SAT/ACT Prep',
 }
 
 const TEACHING_STYLE_LABELS: Record<string, string> = {

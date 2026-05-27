@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
+import { expandLegacyServiceIds, expandLegacyServicePrices } from '@/lib/services'
 
 export async function GET() {
   const session = await auth()
@@ -65,6 +66,20 @@ export async function GET() {
       .eq('email', session.user.email)
       .single()
     if (anyAppByEmail) hasApplication = true
+  }
+
+  if (profile) {
+    profile = {
+      ...profile,
+      services: expandLegacyServiceIds(profile.services as string[] | null),
+      service_prices: expandLegacyServicePrices(profile.service_prices as Record<string, number> | null),
+    }
+  }
+  if (application) {
+    application = {
+      ...application,
+      services_approved: expandLegacyServiceIds(application.services_approved as string[] | null | undefined),
+    }
   }
 
   return NextResponse.json({ profile, application, hasApplication })

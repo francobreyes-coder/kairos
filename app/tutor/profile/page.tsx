@@ -63,7 +63,8 @@ const TEACHING_STYLES = [
 
 const SERVICE_OPTIONS = [
   { id: 'essays', label: 'Essay Writing' },
-  { id: 'sat-act', label: 'SAT/ACT Prep' },
+  { id: 'sat', label: 'SAT Prep' },
+  { id: 'act', label: 'ACT Prep' },
   { id: 'activities', label: 'Activities List Building' },
 ]
 

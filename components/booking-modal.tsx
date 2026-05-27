@@ -31,9 +31,11 @@ interface BookingModalProps {
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 const SERVICE_LABELS: Record<string, string> = {
-  'essays': 'Essay Writing',
+  essays: 'Essay Writing',
+  sat: 'SAT Prep',
+  act: 'ACT Prep',
+  activities: 'Activities',
   'sat-act': 'SAT/ACT Prep',
-  'activities': 'Activities',
 }
 
 // Returns the Monday of the week containing today, shifted by `offset` weeks.

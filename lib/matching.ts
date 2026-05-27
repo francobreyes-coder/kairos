@@ -39,11 +39,12 @@ export interface MatchResult {
   reasons: string[]
 }
 
-// Maps student goal IDs to tutor service IDs
-const GOAL_TO_SERVICE: Record<string, string> = {
-  'essay-help': 'essays',
-  'test-prep': 'sat-act',
-  'activities': 'activities',
+// Maps student goal IDs to one or more tutor service IDs. The "test-prep"
+// goal covers both SAT and ACT — matching against either offering counts.
+const GOAL_TO_SERVICES: Record<string, string[]> = {
+  'essay-help': ['essays'],
+  'test-prep': ['sat', 'act'],
+  'activities': ['activities'],
 }
 
 function normalize(s: string): string {
@@ -121,8 +122,8 @@ export function computeMatchScore(student: StudentProfile, tutor: TutorProfile):
 
   // 6. Goal ↔ Service alignment (max 5 pts)
   const matchedServices = student.goals.filter((goal) => {
-    const serviceId = GOAL_TO_SERVICE[goal]
-    return serviceId && tutor.services.includes(serviceId)
+    const serviceIds = GOAL_TO_SERVICES[goal]
+    return serviceIds?.some((id) => tutor.services.includes(id))
   })
   if (matchedServices.length > 0) {
     score += 5

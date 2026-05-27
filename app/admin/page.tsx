@@ -10,7 +10,8 @@ const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
 const SERVICES = [
   { id: 'essays', label: 'Essay Writing' },
-  { id: 'sat-act', label: 'SAT/ACT Prep' },
+  { id: 'sat', label: 'SAT Prep' },
+  { id: 'act', label: 'ACT Prep' },
   { id: 'activities', label: 'Activities List Building' },
 ]
 

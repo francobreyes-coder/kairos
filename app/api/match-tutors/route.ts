@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { rankTutors, type StudentProfile, type TutorProfile } from '@/lib/matching'
 import { findTutorProfile } from '@/lib/tutor-profile'
+import { expandLegacyServiceIds, expandLegacyServicePrices } from '@/lib/services'
 
 export async function GET() {
   const session = await auth()
@@ -93,7 +94,18 @@ export async function GET() {
   }
 
   // Drop suspended/banned (and any other non-approved) tutors before ranking.
-  const approvedTutors = tutors.filter((t) => approvedTutorIds.has(t.user_id))
+  // Expand any legacy 'sat-act' ids so callers see the split SAT/ACT services
+  // consistently and the matcher's service-alignment check stays in sync with
+  // the new id catalog.
+  const approvedTutors = tutors
+    .filter((t) => approvedTutorIds.has(t.user_id))
+    .map((t) => ({
+      ...t,
+      services: expandLegacyServiceIds(t.services as string[] | null),
+      service_prices: expandLegacyServicePrices(
+        (t as unknown as { service_prices?: Record<string, number> | null }).service_prices,
+      ),
+    }))
 
   if (approvedTutors.length === 0) {
     return NextResponse.json({ matches: [], viewerSelfUserId: null })
