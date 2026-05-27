@@ -325,8 +325,7 @@ export default function SessionsPage() {
                       {statusBadge(s.status)}
                       {s.status === 'confirmed' &&
                         (activeIds.has(s.id) ||
-                          (s.scheduled_date >= today &&
-                            isWithinSessionWindow(s.scheduled_date, s.time_slot))) && (
+                          isWithinSessionWindow(s.scheduled_date, s.time_slot)) && (
                           <button
                             onClick={() => router.push(`/session/${s.id}`)}
                             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"

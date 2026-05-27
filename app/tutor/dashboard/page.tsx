@@ -486,8 +486,7 @@ function SessRow({
   onCancel?: (id: string) => void
   cancelling?: string | null
 }) {
-  const today = new Date().toISOString().split('T')[0]
-  const canJoin = !past && s.status === 'confirmed' && s.scheduled_date >= today && isWithinSessionWindow(s.scheduled_date, s.time_slot)
+  const canJoin = !past && s.status === 'confirmed' && isWithinSessionWindow(s.scheduled_date, s.time_slot)
   const priceLabel = (parseFloat(String(s.price)) || 0) > 0 ? `+$${Math.round(parseFloat(String(s.price)))}` : ''
 
   return (
