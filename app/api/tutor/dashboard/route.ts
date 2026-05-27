@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { getUserCandidateIds } from '@/lib/user-candidates'
-import { expandLegacyServiceIds, expandLegacyServicePrices } from '@/lib/services'
+import { expandLegacyServiceIds, expandLegacyServicePrices, SERVICE_LABELS } from '@/lib/services'
+
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 // GET /api/tutor/dashboard — fetch all data needed for the tutor dashboard
 export async function GET() {
@@ -100,13 +103,14 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 })
   }
 
-  // Gather student names
+  // Gather student names + grade/school for sub-line in lists
   const studentIds = new Set<string>()
   for (const s of sessions ?? []) {
     studentIds.add(s.student_id)
   }
 
   const nameMap = new Map<string, string>()
+  const subMap = new Map<string, string>()
   if (studentIds.size > 0) {
     const { data: users } = await supabase
       .from('users')
@@ -119,15 +123,16 @@ export async function GET() {
       }
     }
 
-    // Check students table for better names
+    // Check students table for better names + grade
     const { data: students } = await supabase
       .from('students')
-      .select('user_id, name')
+      .select('user_id, name, grade')
       .in('user_id', Array.from(studentIds))
 
     if (students) {
       for (const s of students) {
         if (s.name) nameMap.set(s.user_id, s.name)
+        if (s.grade) subMap.set(s.user_id, s.grade)
       }
     }
   }
@@ -137,6 +142,7 @@ export async function GET() {
   const enrichedSessions = (sessions ?? []).map((s) => ({
     ...s,
     student_name: nameMap.get(s.student_id) ?? 'Student',
+    student_sub: subMap.get(s.student_id) ?? '',
   }))
 
   const upcoming = enrichedSessions.filter(
@@ -151,14 +157,88 @@ export async function GET() {
   const totalEarnings = completed.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
   const earningsPerSession = completed.length > 0 ? totalEarnings / completed.length : 0
 
-  // Earnings this week
+  // Earnings this week (current Sun→Sat window)
   const now = new Date()
   const startOfWeek = new Date(now)
   startOfWeek.setDate(now.getDate() - now.getDay())
+  startOfWeek.setHours(0, 0, 0, 0)
   const startOfWeekStr = startOfWeek.toISOString().split('T')[0]
+
   const earningsThisWeek = completed
     .filter((s) => s.scheduled_date >= startOfWeekStr)
     .reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
+
+  // Pending earnings — money tied up in confirmed-but-not-yet-completed sessions
+  const pendingEarnings = upcoming.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
+
+  // Weekly buckets — Mon..Sun in the current week, $ from completed sessions
+  // Use scheduled_date so a session that hasn't been marked completed yet still
+  // shows in the right column once it transitions.
+  const weekly = DAY_LABELS.map((label) => ({ label, val: 0 }))
+  for (const s of completed) {
+    if (s.scheduled_date < startOfWeekStr) continue
+    const d = new Date(s.scheduled_date + 'T00:00:00')
+    // JS getDay: 0=Sun..6=Sat. Map to 0=Mon..6=Sun.
+    const idx = (d.getDay() + 6) % 7
+    weekly[idx].val += parseFloat(s.price) || 0
+  }
+  for (const w of weekly) w.val = Math.round(w.val)
+
+  // Monthly buckets — last 6 months ending this month
+  const monthly: { label: string; val: number; ym: string }[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    monthly.push({
+      label: MONTH_LABELS[d.getMonth()],
+      val: 0,
+      ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+    })
+  }
+  const monthlySessions = monthly.map((m) => ({ label: m.label, val: 0 }))
+  for (const s of completed) {
+    const ym = s.scheduled_date.slice(0, 7)
+    const idx = monthly.findIndex((m) => m.ym === ym)
+    if (idx >= 0) {
+      monthly[idx].val += parseFloat(s.price) || 0
+      monthlySessions[idx].val += 1
+    }
+  }
+  for (const m of monthly) m.val = Math.round(m.val)
+
+  // Top students by completed session count (for Analytics "by student" chart)
+  const studentCounts = new Map<string, { name: string; sub: string; count: number }>()
+  for (const s of completed) {
+    const existing = studentCounts.get(s.student_id)
+    if (existing) {
+      existing.count += 1
+    } else {
+      studentCounts.set(s.student_id, {
+        name: s.student_name,
+        sub: s.student_sub,
+        count: 1,
+      })
+    }
+  }
+  const topStudents = Array.from(studentCounts.entries())
+    .map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+
+  // Repeat rate — % of completed-session students who have 2+ completed sessions
+  const repeatRate = studentCounts.size > 0
+    ? Math.round(
+        (Array.from(studentCounts.values()).filter((v) => v.count >= 2).length /
+          studentCounts.size) * 100,
+      )
+    : 0
+
+  // Subject breakdown — derived from services the tutor offers, weighted by
+  // number of approved services (no per-session subject tagging exists yet).
+  const services = expandLegacyServiceIds(profile.services as string[] | null)
+  const servicesBreakdown = services.map((id) => ({
+    id,
+    label: SERVICE_LABELS[id] ?? id,
+  }))
 
   // Tutor application name (try user_id, then email fallback)
   let { data: app } = await supabase
@@ -181,7 +261,7 @@ export async function GET() {
   return NextResponse.json({
     profile: {
       ...profile,
-      services: expandLegacyServiceIds(profile.services as string[] | null),
+      services,
       service_prices: expandLegacyServicePrices(profile.service_prices as Record<string, number> | null),
       name: app?.name ?? session.user.name ?? 'Tutor',
       profile_photo: profile.profile_photo
@@ -192,11 +272,19 @@ export async function GET() {
       totalEarnings,
       earningsPerSession,
       earningsThisWeek,
+      pendingEarnings,
       upcomingCount: upcoming.length,
       completedCount: completed.length,
       totalSessions: enrichedSessions.length,
+      uniqueStudents: studentCounts.size,
+      repeatRate,
     },
     upcoming: upcoming.slice(0, 10),
     past: past.slice(0, 20),
+    weekly,
+    monthly: monthly.map(({ label, val }) => ({ label, val })),
+    monthlySessions,
+    topStudents,
+    servicesBreakdown,
   })
 }
