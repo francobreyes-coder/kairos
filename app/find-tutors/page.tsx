@@ -30,6 +30,8 @@ interface TutorMatch {
   teachingStyle: string
   services: string[]
   servicePrices: Record<string, number>
+  satScore: number | null
+  actScore: number | null
   score: number
   reasons: string[]
 }

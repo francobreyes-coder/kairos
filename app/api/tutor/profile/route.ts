@@ -159,6 +159,10 @@ export async function POST(req: Request) {
   if (body.servicePrices !== undefined) profileData.service_prices = body.servicePrices
   if (body.profileCompleted !== undefined) profileData.profile_completed = body.profileCompleted
   if (body.profilePhoto !== undefined) profileData.profile_photo = body.profilePhoto
+  // SAT/ACT scores are nullable on the DB and may be null when the tutor
+  // doesn't offer that service. Accept null explicitly so deselecting clears.
+  if (body.satScore !== undefined) profileData.sat_score = body.satScore
+  if (body.actScore !== undefined) profileData.act_score = body.actScore
   // Tutor's source timezone: captured from the browser when they set
   // availability. Their slots ("1:00 PM") are interpreted as wall-clock in
   // this tz, then converted to whichever tz a viewer is in.

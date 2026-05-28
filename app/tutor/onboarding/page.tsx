@@ -96,6 +96,8 @@ interface ProfileData {
   teachingStyle: string
   availability: Record<string, string[]>
   services: string[]
+  satScore: string
+  actScore: string
 }
 
 const emptyProfile: ProfileData = {
@@ -108,6 +110,18 @@ const emptyProfile: ProfileData = {
   teachingStyle: '',
   availability: {},
   services: [],
+  satScore: '',
+  actScore: '',
+}
+
+function isValidSatScore(raw: string): boolean {
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 400 && n <= 1600
+}
+
+function isValidActScore(raw: string): boolean {
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 1 && n <= 36
 }
 
 const inputCls =
@@ -191,6 +205,8 @@ export default function OnboardingPage() {
           interests: existing?.interests || [],
           teachingStyle: existing?.teaching_style || '',
           availability: existing?.availability || {},
+          satScore: existing?.sat_score != null ? String(existing.sat_score) : '',
+          actScore: existing?.act_score != null ? String(existing.act_score) : '',
         }))
         setLoading(false)
       })
@@ -263,13 +279,34 @@ export default function OnboardingPage() {
     update('profilePhoto', '')
   }
 
+  function buildSavePayload(profileCompleted: boolean) {
+    // Only send a score when the corresponding service is selected; otherwise
+    // null it out so a tutor who deselected SAT/ACT doesn't leave a stale score
+    // attached to their profile.
+    const satScore =
+      profile.services.includes('sat') && isValidSatScore(profile.satScore)
+        ? Number(profile.satScore)
+        : null
+    const actScore =
+      profile.services.includes('act') && isValidActScore(profile.actScore)
+        ? Number(profile.actScore)
+        : null
+    return {
+      ...profile,
+      satScore,
+      actScore,
+      profileCompleted,
+      timezone: getBrowserTimezone(),
+    }
+  }
+
   async function saveProgress() {
     await fetch('/api/tutor/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // Capture the tutor's browser timezone alongside their slots so the
       // wall-clock times can be displayed correctly to students elsewhere.
-      body: JSON.stringify({ ...profile, profileCompleted: false, timezone: getBrowserTimezone() }),
+      body: JSON.stringify(buildSavePayload(false)),
     })
   }
 
@@ -278,7 +315,7 @@ export default function OnboardingPage() {
     await fetch('/api/tutor/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...profile, profileCompleted: true, timezone: getBrowserTimezone() }),
+      body: JSON.stringify(buildSavePayload(true)),
     })
     setSaving(false)
     router.push('/home')
@@ -298,7 +335,12 @@ export default function OnboardingPage() {
       case 0: return profile.bio.trim().length >= 10
       case 1: return profile.college.trim().length > 0 && profile.major.trim().length > 0 && profile.subjects.length > 0
       case 2: return profile.interests.length > 0 && profile.teachingStyle.length > 0
-      case 3: return profile.services.length > 0
+      case 3: {
+        if (profile.services.length === 0) return false
+        if (profile.services.includes('sat') && !isValidSatScore(profile.satScore)) return false
+        if (profile.services.includes('act') && !isValidActScore(profile.actScore)) return false
+        return true
+      }
       case 4: return Object.values(profile.availability).some((slots) => slots.length > 0)
       default: return true
     }
@@ -597,6 +639,61 @@ export default function OnboardingPage() {
                     No specific services were approved. Contact support if this seems wrong.
                   </p>
                 )}
+
+                {(profile.services.includes('sat') || profile.services.includes('act')) && (
+                  <div className="pt-2 border-t border-border space-y-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Your test score</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Students seeing your SAT/ACT Prep service will see your score as proof of credential.
+                      </p>
+                    </div>
+
+                    {profile.services.includes('sat') && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">
+                          SAT score <span className="text-accent">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={400}
+                          max={1600}
+                          step={10}
+                          value={profile.satScore}
+                          onChange={(e) => update('satScore', e.target.value)}
+                          placeholder="e.g. 1480"
+                          className={inputCls}
+                        />
+                        {profile.satScore.length > 0 && !isValidSatScore(profile.satScore) && (
+                          <p className="text-xs text-destructive mt-1">Enter a whole number between 400 and 1600.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {profile.services.includes('act') && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">
+                          ACT score <span className="text-accent">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={36}
+                          step={1}
+                          value={profile.actScore}
+                          onChange={(e) => update('actScore', e.target.value)}
+                          placeholder="e.g. 34"
+                          className={inputCls}
+                        />
+                        {profile.actScore.length > 0 && !isValidActScore(profile.actScore) && (
+                          <p className="text-xs text-destructive mt-1">Enter a whole number between 1 and 36.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -723,6 +820,22 @@ export default function OnboardingPage() {
                         </span>
                       ))}
                     </div>
+                    {(profile.services.includes('sat') || profile.services.includes('act')) && (
+                      <div className="mt-3 text-sm space-y-1">
+                        {profile.services.includes('sat') && (
+                          <div>
+                            <span className="text-muted-foreground">SAT score:</span>{' '}
+                            <span className="text-foreground">{profile.satScore || '—'}</span>
+                          </div>
+                        )}
+                        {profile.services.includes('act') && (
+                          <div>
+                            <span className="text-muted-foreground">ACT score:</span>{' '}
+                            <span className="text-foreground">{profile.actScore || '—'}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </PreviewSection>
 
                   <PreviewSection title="Availability">

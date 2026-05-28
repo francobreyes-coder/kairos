@@ -23,7 +23,7 @@ export async function GET() {
   // Fetch all completed tutor profiles
   const { data: tutors, error: tutorErr } = await supabase
     .from('tutor_profiles')
-    .select('user_id, bio, profile_photo, subjects, college, major, interests, teaching_style, services, service_prices, availability, profile_completed')
+    .select('user_id, bio, profile_photo, subjects, college, major, interests, teaching_style, services, service_prices, availability, profile_completed, sat_score, act_score')
     .eq('profile_completed', true)
 
   if (tutorErr) {
@@ -142,21 +142,26 @@ export async function GET() {
 
   const ranked = rankTutors(studentProfile, approvedTutors as TutorProfile[], bookedTutorProfiles)
 
-  const matches = ranked.map((m) => ({
-    userId: m.tutor.user_id,
-    name: nameMap.get(m.tutor.user_id) ?? 'Tutor',
-    bio: m.tutor.bio,
-    profilePhoto: m.tutor.profile_photo,
-    subjects: m.tutor.subjects,
-    college: m.tutor.college,
-    major: m.tutor.major,
-    interests: m.tutor.interests,
-    teachingStyle: m.tutor.teaching_style,
-    services: m.tutor.services,
-    servicePrices: (m.tutor as unknown as Record<string, unknown>).service_prices ?? {},
-    score: m.score,
-    reasons: m.reasons,
-  }))
+  const matches = ranked.map((m) => {
+    const raw = m.tutor as unknown as Record<string, unknown>
+    return {
+      userId: m.tutor.user_id,
+      name: nameMap.get(m.tutor.user_id) ?? 'Tutor',
+      bio: m.tutor.bio,
+      profilePhoto: m.tutor.profile_photo,
+      subjects: m.tutor.subjects,
+      college: m.tutor.college,
+      major: m.tutor.major,
+      interests: m.tutor.interests,
+      teachingStyle: m.tutor.teaching_style,
+      services: m.tutor.services,
+      servicePrices: raw.service_prices ?? {},
+      satScore: (raw.sat_score as number | null | undefined) ?? null,
+      actScore: (raw.act_score as number | null | undefined) ?? null,
+      score: m.score,
+      reasons: m.reasons,
+    }
+  })
 
   // Tell the client which row in `matches` (if any) belongs to the viewer,
   // so a tutor visiting /find-tutors sees their own card pinned as the top

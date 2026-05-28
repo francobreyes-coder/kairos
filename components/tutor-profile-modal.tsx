@@ -16,6 +16,8 @@ interface TutorProfileModalProps {
     teachingStyle: string
     services: string[]
     servicePrices: Record<string, number>
+    satScore?: number | null
+    actScore?: number | null
     score: number
     reasons: string[]
   }
@@ -151,9 +153,20 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
               <div className="modal-service-list">
                 {tutor.services.map((s) => {
                   const price = tutor.servicePrices?.[s]
+                  // Show the tutor's own SAT/ACT score next to the matching
+                  // service as a credential signal for browsing students.
+                  const credential =
+                    s === 'sat' && typeof tutor.satScore === 'number'
+                      ? `Scored ${tutor.satScore}`
+                      : s === 'act' && typeof tutor.actScore === 'number'
+                        ? `Scored ${tutor.actScore}`
+                        : null
                   return (
                     <div key={s} className="modal-service-row">
-                      <span>{SERVICE_LABELS[s] ?? s}</span>
+                      <div className="modal-service-label">
+                        <span>{SERVICE_LABELS[s] ?? s}</span>
+                        {credential && <span className="modal-service-credential">{credential}</span>}
+                      </div>
                       {price ? <strong>${price}/hr</strong> : <span className="modal-no-price">—</span>}
                     </div>
                   )
@@ -402,6 +415,18 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
           border-radius: 12px;
           font-size: 14px;
           color: #1C1B1F;
+          gap: 12px;
+        }
+        .modal-service-label {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .modal-service-credential {
+          font-size: 12px;
+          font-weight: 600;
+          color: #7A3AE8;
         }
         .modal-service-row strong {
           color: #7A3AE8;
