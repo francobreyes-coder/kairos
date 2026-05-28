@@ -1907,6 +1907,10 @@ export default function TutorDashboard() {
     )
   }, [data, search])
 
+  // Hook must run unconditionally (Rules of Hooks) — the mobile branch sits
+  // below the loading/error early returns, but the hook call cannot.
+  const isMobile = useIsMobile()
+
   /* ── Loading / error states keep the same access logic as before ──────── */
 
   if (status === 'loading' || (status === 'authenticated' && loading)) {
@@ -1963,7 +1967,6 @@ export default function TutorDashboard() {
 
   const [title, sub] = META[panel]
 
-  const isMobile = useIsMobile()
   if (isMobile) {
     const onJoinSession = (id: string) => router.push(`/session/${id}`)
     return (

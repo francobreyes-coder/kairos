@@ -1388,6 +1388,10 @@ function StudentDashboardInner() {
 
   const upcomingCount = sessions.filter(isUpcoming).length
 
+  // Hook must run unconditionally (Rules of Hooks) — the mobile branch below
+  // sits after the auth-loading early return, but the hook call cannot.
+  const isMobile = useIsMobile()
+
   if (status === 'loading') {
     return (
       <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: '#F7F5F0' }}>
@@ -1407,7 +1411,6 @@ function StudentDashboardInner() {
   const title = panel === 'home' ? homeTitle : titleRaw
   const sub = panel === 'home' ? homeSub : subRaw
 
-  const isMobile = useIsMobile()
   if (isMobile) {
     // Phone layout: sidebar + top bar are dropped; messages and profile use
     // dedicated mobile screens (list ↔ thread, single-column form).
