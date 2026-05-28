@@ -84,7 +84,9 @@ export function MobileTutorProfile({
   const activeServices = profile.services ?? []
   const expertiseLabels = activeServices.map((id) => SERVICE_LABELS[id] ?? id)
   const photoSrc = profile.profile_photo
-    ? `/api/storage?path=${encodeURIComponent(profile.profile_photo)}`
+    ? profile.profile_photo.startsWith('/api/') || profile.profile_photo.startsWith('http')
+      ? profile.profile_photo
+      : `/api/storage?path=${encodeURIComponent(profile.profile_photo)}`
     : null
 
   function updateRate(id: string, v: string | number) {
