@@ -37,6 +37,8 @@ import {
 } from '@/lib/timezone'
 import { useViewerTimezone } from '@/lib/use-viewer-timezone'
 import { TimezoneSelector } from '@/components/timezone-selector'
+import { useIsMobile } from '@/lib/use-is-mobile'
+import { MobileTutorDashboard } from '@/components/mobile-tutor-dashboard'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Types
@@ -1960,6 +1962,25 @@ export default function TutorDashboard() {
   }
 
   const [title, sub] = META[panel]
+
+  const isMobile = useIsMobile()
+  if (isMobile) {
+    const onJoinSession = (id: string) => router.push(`/session/${id}`)
+    return (
+      <MobileTutorDashboard
+        data={data}
+        panel={panel}
+        setPanel={setPanel}
+        onJoinSession={onJoinSession}
+        onSaveProfile={saveProfilePatch}
+        savingProfile={savingProfile}
+        onSavePrices={saveServicePrices}
+        savingPrices={savingPrices}
+        onSaveAvailability={saveAvailability}
+        savingAvailability={savingAvailability}
+      />
+    )
+  }
 
   return (
     <>

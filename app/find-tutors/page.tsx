@@ -17,6 +17,8 @@ import {
 import BookingModal from '@/components/booking-modal'
 import TutorProfileModal from '@/components/tutor-profile-modal'
 import { StudentSidebar, type SidebarItemId } from '@/components/student-sidebar'
+import { useIsMobile } from '@/lib/use-is-mobile'
+import { MobileFindTutors } from '@/components/mobile-find-tutors'
 
 interface TutorMatch {
   userId: string
@@ -230,6 +232,69 @@ export default function FindTutorsPage() {
       </div>
     </div>
   )
+
+  const isMobile = useIsMobile()
+  if (isMobile) {
+    return (
+      <>
+        <MobileFindTutors
+          matches={matches}
+          filtered={filtered}
+          filterChips={filterChips}
+          activeFilter={activeFilter}
+          setActiveFilter={setActiveFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          sortMode={sortMode}
+          setSortMode={setSortMode}
+          loading={loading}
+          error={error}
+          viewerSelfId={viewerSelfId}
+          isTutorViewer={isTutorViewer}
+          onOpenProfile={(t) => setProfileTutor(t)}
+          onBook={(t) =>
+            setBookingTutor({
+              id: t.userId,
+              name: t.name,
+              services: t.services,
+              servicePrices: t.servicePrices,
+            })
+          }
+          onClearFilters={clearFilters}
+        />
+        {bookingTutor && !isTutorViewer && (
+          <BookingModal
+            tutorId={bookingTutor.id}
+            tutorName={bookingTutor.name}
+            services={bookingTutor.services}
+            servicePrices={bookingTutor.servicePrices}
+            onClose={() => setBookingTutor(null)}
+            onBooked={() => setBookingTutor(null)}
+          />
+        )}
+        {profileTutor && (
+          <TutorProfileModal
+            tutor={profileTutor}
+            isSelf={profileTutor.userId === viewerSelfId}
+            onClose={() => setProfileTutor(null)}
+            onBook={
+              isTutorViewer
+                ? undefined
+                : () => {
+                    setBookingTutor({
+                      id: profileTutor.userId,
+                      name: profileTutor.name,
+                      services: profileTutor.services,
+                      servicePrices: profileTutor.servicePrices,
+                    })
+                    setProfileTutor(null)
+                  }
+            }
+          />
+        )}
+      </>
+    )
+  }
 
   if (loading) {
     return (

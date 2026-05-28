@@ -10,6 +10,8 @@ import { PhotoCropModal } from '@/components/photo-crop-modal'
 import { DEFAULT_TIMEZONE, convertSlotToTimezone } from '@/lib/timezone'
 import { useViewerTimezone } from '@/lib/use-viewer-timezone'
 import { TimezoneSelector } from '@/components/timezone-selector'
+import { useIsMobile } from '@/lib/use-is-mobile'
+import { MobileStudentDashboard } from '@/components/mobile-student-dashboard'
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Design tokens (scoped to dashboard via :root override on the wrapper)
@@ -1404,6 +1406,30 @@ function StudentDashboardInner() {
   const [titleRaw, subRaw] = PANEL_META[panel]
   const title = panel === 'home' ? homeTitle : titleRaw
   const sub = panel === 'home' ? homeSub : subRaw
+
+  const isMobile = useIsMobile()
+  if (isMobile) {
+    // Phone layout: sidebar + top bar are dropped; messages and profile use
+    // dedicated mobile screens (list ↔ thread, single-column form).
+    return (
+      <MobileStudentDashboard
+        firstName={firstName}
+        fullName={fullName}
+        email={session?.user?.email ?? ''}
+        profilePhoto={profilePhoto}
+        pendingPartnerId={pendingPartnerId}
+        panel={panel}
+        setPanel={setPanel}
+        tests={tests}
+        sessions={sessions}
+        conversations={conversations}
+        onStartTest={onStartTest}
+        onJoinSession={onJoinSession}
+        onPhotoChange={setProfilePhoto}
+        onNameChange={setOverrideName}
+      />
+    )
+  }
 
   return (
     <div
