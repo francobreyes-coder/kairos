@@ -93,8 +93,10 @@ export async function sendBookingConfirmationEmail(
   to: string,
   name: string,
   tutorName: string,
-  date: string,
-  timeSlot: string,
+  // Pre-formatted "Monday, April 20, 2026 · 1:00 PM EDT" — built by the
+  // caller so the timezone displayed matches whichever tz the session is
+  // anchored to (and so email content stays free of Intl calls).
+  whenLabel: string,
 ) {
   await getResend().emails.send({
     from: FROM,
@@ -107,8 +109,7 @@ export async function sendBookingConfirmationEmail(
       </p>
       <div style="margin: 16px 0; padding: 16px; background-color: #faf5ff; border-radius: 8px; border-left: 4px solid #7c3aed;">
         <p style="font-size: 15px; color: #1a1a1a; margin: 0 0 8px;"><strong>Tutor:</strong> ${tutorName}</p>
-        <p style="font-size: 15px; color: #1a1a1a; margin: 0 0 8px;"><strong>Date:</strong> ${date}</p>
-        <p style="font-size: 15px; color: #1a1a1a; margin: 0;"><strong>Time:</strong> ${timeSlot}</p>
+        <p style="font-size: 15px; color: #1a1a1a; margin: 0;"><strong>When:</strong> ${whenLabel}</p>
       </div>
       <p style="font-size: 15px; color: #555; line-height: 1.6; margin: 0 0 24px;">
         You can view and manage your sessions from your Kairos dashboard.

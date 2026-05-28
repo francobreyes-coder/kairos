@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   // Get tutor's availability template
   const { data: tutor } = await supabase
     .from('tutor_profiles')
-    .select('availability')
+    .select('availability, timezone')
     .eq('user_id', tutorId)
     .eq('profile_completed', true)
     .single()
@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   const availability = tutor.availability as Record<string, string[]>
+  const tutorTimezone = (tutor.timezone as string | null) ?? null
 
   // Calculate dates for each day of the selected week
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
     }))
   }
 
-  return NextResponse.json({ slots, dayDates })
+  return NextResponse.json({ slots, dayDates, tutorTimezone })
 }
 
 // Returns the Monday of the week containing today (Sun=0..Sat=6).

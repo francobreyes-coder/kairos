@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   // Verify tutor exists and has this availability + price
   const { data: tutor } = await supabase
     .from('tutor_profiles')
-    .select('availability, service_prices, services, stripe_account_id')
+    .select('availability, service_prices, services, stripe_account_id, timezone')
     .eq('user_id', tutorId)
     .eq('profile_completed', true)
     .single()
@@ -224,6 +224,10 @@ export async function POST(req: NextRequest) {
       service,
       price: String(price),
       application_fee_cents: String(applicationFee),
+      // Tutor's source timezone — the slot string ("1:00 PM") is wall-clock
+      // in this tz. Persisted on sessions so we can render the session time
+      // in any viewer's tz forever, even if the tutor later changes theirs.
+      timezone: (tutor.timezone as string | null) ?? '',
     },
     success_url: `${baseUrl}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/booking/cancel`,

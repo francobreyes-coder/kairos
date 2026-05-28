@@ -13,6 +13,8 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react'
+import { DEFAULT_TIMEZONE, convertSlotToTimezone } from '@/lib/timezone'
+import { useViewerTimezone } from '@/lib/use-viewer-timezone'
 
 interface SessionInfo {
   id: string
@@ -22,6 +24,7 @@ interface SessionInfo {
   student_name: string
   tutor_name: string
   is_tutor: boolean
+  timezone: string | null
 }
 
 export default function SessionNotesPage() {
@@ -32,6 +35,7 @@ export default function SessionNotesPage() {
 
   const [info, setInfo] = useState<SessionInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const viewerTz = useViewerTimezone()
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.push('/auth')
@@ -122,11 +126,16 @@ export default function SessionNotesPage() {
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5" />
-                  {formatDate(info.scheduled_date)}
+                  {formatDate(info, viewerTz)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
-                  {info.time_slot}
+                  {convertSlotToTimezone(
+                    info.scheduled_date,
+                    info.time_slot,
+                    info.timezone || DEFAULT_TIMEZONE,
+                    viewerTz,
+                  )?.time ?? info.time_slot}
                 </span>
               </div>
             </div>
@@ -141,16 +150,23 @@ export default function SessionNotesPage() {
   )
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(s: SessionInfo, viewerTz: string): string {
   try {
-    const d = new Date(dateStr + 'T00:00:00')
-    return d.toLocaleDateString('en-US', {
+    const converted = convertSlotToTimezone(
+      s.scheduled_date,
+      s.time_slot,
+      s.timezone || DEFAULT_TIMEZONE,
+      viewerTz,
+    )
+    const d = converted?.utc ?? new Date(s.scheduled_date + 'T00:00:00')
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: viewerTz,
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    })
+    }).format(d)
   } catch {
-    return dateStr
+    return s.scheduled_date
   }
 }

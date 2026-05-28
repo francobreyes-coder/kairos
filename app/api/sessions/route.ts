@@ -5,6 +5,7 @@ import { sendBookingConfirmationEmail } from '@/lib/email'
 import { createVideoRoom } from '@/lib/daily'
 import { getUserCandidateIds } from '@/lib/user-candidates'
 import { getStripe } from '@/lib/stripe'
+import { DEFAULT_TIMEZONE, formatSessionDateTime } from '@/lib/timezone'
 
 // GET /api/sessions — fetch user's sessions (as student or tutor)
 export async function GET() {
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest) {
   // Verify the tutor exists and has this availability
   const { data: tutor } = await supabase
     .from('tutor_profiles')
-    .select('availability')
+    .select('availability, timezone')
     .eq('user_id', tutorId)
     .eq('profile_completed', true)
     .single()
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
   if (!daySlots.includes(timeSlot)) {
     return NextResponse.json({ error: 'Tutor is not available at this time' }, { status: 400 })
   }
+  const sessionTimezone = (tutor.timezone as string | null) || DEFAULT_TIMEZONE
 
   // Check for double booking (the unique index will also catch this, but give a nicer error)
   const { data: existing } = await supabase
@@ -167,6 +169,7 @@ export async function POST(req: NextRequest) {
       scheduled_date: scheduledDate,
       notes: notes || '',
       status: 'confirmed',
+      timezone: sessionTimezone,
     })
     .select()
     .single()
@@ -178,7 +181,12 @@ export async function POST(req: NextRequest) {
 
   // Create a Daily.co video room for this session
   try {
-    const { roomName, roomUrl } = await createVideoRoom(newSession.id, scheduledDate, timeSlot)
+    const { roomName, roomUrl } = await createVideoRoom(
+      newSession.id,
+      scheduledDate,
+      timeSlot,
+      sessionTimezone,
+    )
     await supabase
       .from('sessions')
       .update({ video_room_name: roomName, video_room_url: roomUrl })
@@ -206,15 +214,18 @@ export async function POST(req: NextRequest) {
     const tutorName = tutorApp?.name ?? 'your tutor'
     const studentEmail = student?.email
     const studentName = student?.name?.split(' ')[0] || 'there'
-    const formattedDate = new Date(scheduledDate + 'T00:00:00').toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    // Show the session time in the tutor's tz with a tz abbreviation; the
+    // /sessions page converts to the recipient's local tz on view.
+    const whenLabel = formatSessionDateTime(
+      scheduledDate,
+      timeSlot,
+      sessionTimezone,
+      sessionTimezone,
+      { dateStyle: 'full', includeTimezone: true },
+    )
 
     if (studentEmail) {
-      await sendBookingConfirmationEmail(studentEmail, studentName, tutorName, formattedDate, timeSlot)
+      await sendBookingConfirmationEmail(studentEmail, studentName, tutorName, whenLabel)
     }
   } catch (e) {
     console.error('Failed to send booking confirmation email:', e)

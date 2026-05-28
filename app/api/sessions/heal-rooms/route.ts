@@ -34,7 +34,7 @@ export async function GET() {
 
   const { data: rows, error } = await supabase
     .from('sessions')
-    .select('id, scheduled_date, time_slot, video_room_name, video_room_url')
+    .select('id, scheduled_date, time_slot, timezone, video_room_name, video_room_url')
     .eq('status', 'confirmed')
     .or(`student_id.in.(${idList}),tutor_id.in.(${idList})`)
 
@@ -51,7 +51,7 @@ export async function GET() {
 
   for (const r of rows ?? []) {
     try {
-      const result = await createVideoRoom(r.id, r.scheduled_date, r.time_slot)
+      const result = await createVideoRoom(r.id, r.scheduled_date, r.time_slot, r.timezone || 'America/New_York')
       // Persist if changed
       if (
         r.video_room_name !== result.roomName ||

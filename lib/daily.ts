@@ -6,6 +6,8 @@
  *   DAILY_DOMAIN    — your Daily domain, e.g. "kairos" (without .daily.co)
  */
 
+import { sessionEndUnix } from './timezone'
+
 const DAILY_API = 'https://api.daily.co/v1'
 
 function getApiKey(): string {
@@ -33,9 +35,10 @@ export async function createVideoRoom(
   sessionId: string,
   scheduledDate: string,
   timeSlot: string,
+  sourceTimezone: string,
 ): Promise<CreateRoomResult> {
   const roomName = `session-${sessionId}`
-  const expiry = computeRoomExpiry(scheduledDate, timeSlot)
+  const expiry = computeRoomExpiry(scheduledDate, timeSlot, sourceTimezone)
 
   // Properties we want every session room to have. Re-applied to existing
   // rooms so older rooms (created before enable_prejoin_ui was added, or
@@ -215,36 +218,21 @@ export async function listActiveRoomNames(): Promise<Set<string>> {
 /**
  * Compute Unix timestamp for the Daily.co room's `exp` (auto-delete time).
  *
- * scheduledDate + timeSlot have no timezone — they're stored as plain
- * "1:00 PM" against a date — and the server (Vercel) runs in UTC, while
- * the tutor and student are in their own local zones. Naively parsing the
- * timestamp as local time on a UTC server can produce a past `exp` for
- * same-day afternoon bookings west of UTC, which makes Daily.co reject
- * the room and leaves the session with no video link.
- *
- * Guard against that by always returning at least now + MIN_LIFETIME_SEC,
- * regardless of what the parsed timestamp says.
+ * Times are stored as plain "1:00 PM" against a date plus a source tz on
+ * the session row. We resolve that to a real UTC instant (90 min buffer)
+ * via sessionEndUnix, then floor at now + MIN_LIFETIME_SEC so a stale or
+ * missing tz can never produce a past `exp` (Daily.co rejects those and
+ * the session would end up with no video link).
  */
-function computeRoomExpiry(scheduledDate: string, timeSlot: string): number {
+function computeRoomExpiry(
+  scheduledDate: string,
+  timeSlot: string,
+  sourceTimezone: string,
+): number {
   const MIN_LIFETIME_SEC = 6 * 60 * 60 // 6 hours from creation, minimum
   const now = Math.floor(Date.now() / 1000)
   const floor = now + MIN_LIFETIME_SEC
-
-  const match = timeSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-  if (!match) return floor
-
-  let hours = parseInt(match[1], 10)
-  const minutes = parseInt(match[2], 10)
-  const period = match[3].toUpperCase()
-  if (period === 'PM' && hours !== 12) hours += 12
-  if (period === 'AM' && hours === 12) hours = 0
-
-  const dt = new Date(
-    `${scheduledDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`,
-  )
-  // 1.5h buffer after session start (assumed local-ish, may be off by tz).
-  dt.setMinutes(dt.getMinutes() + 90)
-  const scheduled = Math.floor(dt.getTime() / 1000)
-
+  const scheduled = sessionEndUnix(scheduledDate, timeSlot, sourceTimezone, 90)
+  if (scheduled === null) return floor
   return Math.max(scheduled, floor)
 }

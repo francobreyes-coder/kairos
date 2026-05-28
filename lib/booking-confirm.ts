@@ -2,6 +2,7 @@ import type Stripe from 'stripe'
 import { getSupabase } from '@/lib/supabase'
 import { sendBookingConfirmationEmail } from '@/lib/email'
 import { createVideoRoom } from '@/lib/daily'
+import { DEFAULT_TIMEZONE, formatSessionDateTime } from '@/lib/timezone'
 
 // Idempotent fulfillment from a paid Stripe checkout session: insert the
 // session row, create a Daily.co room, and send the confirmation email.
@@ -30,6 +31,8 @@ export async function fulfillCheckoutBooking(
     ? parseInt(meta.application_fee_cents, 10)
     : null
 
+  const sessionTimezone = meta.timezone || DEFAULT_TIMEZONE
+
   const { data: inserted, error } = await supabase
     .from('sessions')
     .insert({
@@ -44,6 +47,7 @@ export async function fulfillCheckoutBooking(
       payment_status: 'paid',
       stripe_payment_intent_id: paymentIntentId,
       stripe_application_fee_amount: applicationFeeAmount,
+      timezone: sessionTimezone,
     })
     .select()
     .single()
@@ -71,6 +75,7 @@ export async function fulfillCheckoutBooking(
       sessionId,
       meta.scheduled_date,
       meta.time_slot,
+      sessionTimezone,
     )
     await supabase
       .from('sessions')
@@ -97,9 +102,15 @@ export async function fulfillCheckoutBooking(
     const tutorName = tutorApp?.name ?? 'your tutor'
     const studentEmail = student?.email
     const studentName = student?.name?.split(' ')[0] || 'there'
-    const formattedDate = new Date(meta.scheduled_date + 'T00:00:00').toLocaleDateString(
-      'en-US',
-      { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' },
+    // Render date + time in the session's source timezone (the tutor's tz
+    // at booking time) so the email shows a single canonical time labeled
+    // with the tz abbreviation — recipients in other zones convert mentally.
+    const formattedWhen = formatSessionDateTime(
+      meta.scheduled_date,
+      meta.time_slot,
+      sessionTimezone,
+      sessionTimezone,
+      { dateStyle: 'full', includeTimezone: true },
     )
 
     if (studentEmail) {
@@ -107,8 +118,7 @@ export async function fulfillCheckoutBooking(
         studentEmail,
         studentName,
         tutorName,
-        formattedDate,
-        meta.time_slot,
+        formattedWhen,
       )
     }
   } catch (e) {

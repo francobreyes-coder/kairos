@@ -12,10 +12,26 @@ import {
   DollarSign,
   CreditCard,
 } from 'lucide-react'
+import {
+  DEFAULT_TIMEZONE,
+  convertSlotToTimezone,
+} from '@/lib/timezone'
+import { useViewerTimezone } from '@/lib/use-viewer-timezone'
+import { TimezoneSelector } from '@/components/timezone-selector'
 
 interface SlotInfo {
   time: string
   date: string
+  available: boolean
+}
+
+// A slot after conversion into the viewer's timezone. The original tutor-tz
+// (time, date, dayOfWeek) are kept so we can send them back to the booking
+// API exactly as the tutor stored them — the server validates against its
+// own copy of the availability template, which is still in tutor-tz.
+interface DisplaySlot {
+  display: { time: string; date: string; dayOfWeek: string }
+  source: { time: string; date: string; dayOfWeek: string }
   available: boolean
 }
 
@@ -65,9 +81,12 @@ function formatWeekRange(monday: Date): string {
 export default function BookingModal({ tutorId, tutorName, services, servicePrices, onClose, onBooked }: BookingModalProps) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [slots, setSlots] = useState<Record<string, SlotInfo[]>>({})
-  const [dayDates, setDayDates] = useState<Record<string, string>>({})
+  const [tutorTimezone, setTutorTimezone] = useState<string>(DEFAULT_TIMEZONE)
+  const viewerTz = useViewerTimezone()
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<{ day: string; time: string; date: string } | null>(null)
+  // Selected slot carries both the original tutor-tz coordinates (sent to
+  // the API for validation) and the display coordinates (shown in the UI).
+  const [selected, setSelected] = useState<DisplaySlot | null>(null)
   const [selectedService, setSelectedService] = useState<string | null>(
     services.length === 1 ? services[0] : null
   )
@@ -79,6 +98,12 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
   const monday = getMonday(weekOffset)
   const selectedPrice = selectedService ? servicePrices[selectedService] : null
 
+  // Clear selected slot when viewer tz changes — its display coordinates
+  // are now in a different tz and the user should re-pick deliberately.
+  useEffect(() => {
+    setSelected(null)
+  }, [viewerTz])
+
   useEffect(() => {
     setLoading(true)
     setSelected(null)
@@ -88,11 +113,47 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
       .then((r) => r.json())
       .then((data) => {
         setSlots(data.slots ?? {})
-        setDayDates(data.dayDates ?? {})
+        setTutorTimezone(data.tutorTimezone || DEFAULT_TIMEZONE)
       })
       .catch(() => setError('Failed to load availability'))
       .finally(() => setLoading(false))
   }, [tutorId, weekOffset])
+
+  // Convert tutor-tz slots into the viewer's tz and regroup by the day they
+  // actually land on in the viewer's local time. Slots can shift days when
+  // the tz gap crosses midnight (e.g. a Sydney tutor's 8AM Monday slot is
+  // Sunday afternoon in NY).
+  const displayGroups: { dayOfWeek: string; date: string; slots: DisplaySlot[] }[] = (() => {
+    const buckets = new Map<string, { dayOfWeek: string; date: string; slots: DisplaySlot[] }>()
+    for (const sourceDay of DAYS) {
+      const daySlots = slots[sourceDay]
+      if (!daySlots) continue
+      for (const s of daySlots) {
+        const converted = convertSlotToTimezone(s.date, s.time, tutorTimezone, viewerTz)
+        if (!converted) continue
+        const key = converted.date
+        if (!buckets.has(key)) {
+          buckets.set(key, { dayOfWeek: converted.dayOfWeek, date: converted.date, slots: [] })
+        }
+        buckets.get(key)!.slots.push({
+          display: { time: converted.time, date: converted.date, dayOfWeek: converted.dayOfWeek },
+          source: { time: s.time, date: s.date, dayOfWeek: sourceDay },
+          available: s.available,
+        })
+      }
+    }
+    // Sort buckets by date, slots within each bucket by underlying instant.
+    const ordered = Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date))
+    for (const b of ordered) {
+      b.slots.sort((x, y) => {
+        // Reuse convertSlotToTimezone to get the UTC instant for stable ordering.
+        const xu = convertSlotToTimezone(x.source.date, x.source.time, tutorTimezone, viewerTz)?.utc
+        const yu = convertSlotToTimezone(y.source.date, y.source.time, tutorTimezone, viewerTz)?.utc
+        return (xu?.getTime() ?? 0) - (yu?.getTime() ?? 0)
+      })
+    }
+    return ordered
+  })()
 
   async function handleBook() {
     if (!selected || !selectedService || !selectedPrice) return
@@ -105,9 +166,12 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tutorId,
-          dayOfWeek: selected.day,
-          timeSlot: selected.time,
-          scheduledDate: selected.date,
+          // Send the tutor-tz coordinates the server stored, not the
+          // viewer-tz display coordinates — the server validates against
+          // its own availability template, which is in tutor tz.
+          dayOfWeek: selected.source.dayOfWeek,
+          timeSlot: selected.source.time,
+          scheduledDate: selected.source.date,
           notes,
           service: selectedService,
         }),
@@ -130,7 +194,7 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
     }
   }
 
-  const hasAnySlots = Object.values(slots).some((daySlots) => daySlots.length > 0)
+  const hasAnySlots = displayGroups.some((g) => g.slots.length > 0)
   const canBook = selected && selectedService && selectedPrice && selectedPrice > 0
 
   return (
@@ -214,7 +278,7 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
               )}
 
               {/* Week navigation */}
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
                   disabled={weekOffset === 0}
@@ -235,6 +299,11 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
                 </button>
               </div>
 
+              {/* Viewer-tz override + indicator */}
+              <div className="flex items-center justify-end mb-3">
+                <TimezoneSelector />
+              </div>
+
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 text-accent animate-spin" />
@@ -248,52 +317,41 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
                 </div>
               ) : (
                 <>
-                  {/* Day slots */}
+                  {/* Day slots (in viewer's tz; days regroup when tz crosses midnight) */}
                   <div className="space-y-4 mb-5">
-                    {DAYS.map((day) => {
-                      const daySlots = slots[day]
-                      if (!daySlots || daySlots.length === 0) return null
-                      const date = dayDates[day]
-
-                      return (
-                        <div key={day}>
-                          <div className="text-sm font-medium text-foreground mb-2">
-                            {day}{' '}
-                            <span className="text-muted-foreground font-normal">
-                              {date && formatDate(date)}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {daySlots.map((slot) => {
-                              const isSelected =
-                                selected?.day === day && selected?.time === slot.time
-                              return (
-                                <button
-                                  key={slot.time}
-                                  disabled={!slot.available}
-                                  onClick={() =>
-                                    setSelected(
-                                      isSelected
-                                        ? null
-                                        : { day, time: slot.time, date: slot.date }
-                                    )
-                                  }
-                                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                    !slot.available
-                                      ? 'bg-muted text-muted-foreground/50 line-through cursor-not-allowed'
-                                      : isSelected
-                                        ? 'bg-accent text-accent-foreground ring-2 ring-accent/30'
-                                        : 'bg-muted/60 text-foreground hover:bg-accent/10 hover:text-accent'
-                                  }`}
-                                >
-                                  {slot.time}
-                                </button>
-                              )
-                            })}
-                          </div>
+                    {displayGroups.map((group) => (
+                      <div key={group.date}>
+                        <div className="text-sm font-medium text-foreground mb-2">
+                          {group.dayOfWeek}{' '}
+                          <span className="text-muted-foreground font-normal">
+                            {formatDate(group.date)}
+                          </span>
                         </div>
-                      )
-                    })}
+                        <div className="flex flex-wrap gap-2">
+                          {group.slots.map((slot) => {
+                            const isSelected =
+                              selected?.source.date === slot.source.date &&
+                              selected?.source.time === slot.source.time
+                            return (
+                              <button
+                                key={`${slot.source.dayOfWeek}-${slot.source.time}`}
+                                disabled={!slot.available}
+                                onClick={() => setSelected(isSelected ? null : slot)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                  !slot.available
+                                    ? 'bg-muted text-muted-foreground/50 line-through cursor-not-allowed'
+                                    : isSelected
+                                      ? 'bg-accent text-accent-foreground ring-2 ring-accent/30'
+                                      : 'bg-muted/60 text-foreground hover:bg-accent/10 hover:text-accent'
+                                }`}
+                              >
+                                {slot.display.time}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Notes */}
@@ -317,7 +375,7 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
                     <div className="mb-4 p-3 rounded-xl bg-accent/5 border border-accent/10 flex items-center justify-between">
                       <div className="text-sm text-foreground">
                         <span className="font-medium">{SERVICE_LABELS[selectedService!] ?? selectedService}</span>
-                        {' '}· {selected!.day}, {formatDate(selected!.date)} at {selected!.time}
+                        {' '}· {selected!.display.dayOfWeek}, {formatDate(selected!.display.date)} at {selected!.display.time}
                       </div>
                       <div className="text-lg font-bold text-accent">${selectedPrice}</div>
                     </div>

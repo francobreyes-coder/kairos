@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   // Fetch the session and verify the user is a participant
   const { data: session, error } = await supabase
     .from('sessions')
-    .select('id, student_id, tutor_id, video_room_name, video_room_url, scheduled_date, time_slot, status')
+    .select('id, student_id, tutor_id, video_room_name, video_room_url, scheduled_date, time_slot, timezone, status')
     .eq('id', sessionId)
     .single()
 
@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       session.id,
       session.scheduled_date,
       session.time_slot,
+      (session.timezone as string | null) || 'America/New_York',
     )
     roomName = result.roomName
     roomUrl = result.roomUrl

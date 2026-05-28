@@ -30,6 +30,13 @@ import {
 } from 'lucide-react'
 import { PayoutsCard } from '@/components/payouts-card'
 import { SERVICE_OPTIONS, SERVICE_LABELS } from '@/lib/services'
+import {
+  DEFAULT_TIMEZONE,
+  convertSlotToTimezone,
+  isWithinSessionWindow as isWithinWindow,
+} from '@/lib/timezone'
+import { useViewerTimezone } from '@/lib/use-viewer-timezone'
+import { TimezoneSelector } from '@/components/timezone-selector'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Types
@@ -49,6 +56,7 @@ interface DashboardSession {
   created_at: string
   student_name: string
   student_sub: string
+  timezone: string | null
 }
 
 interface DashboardStats {
@@ -156,41 +164,49 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function sessionSourceTz(s: { timezone?: string | null }): string {
+  return s.timezone || DEFAULT_TIMEZONE
 }
 
-function formatWhen(s: DashboardSession): string {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(today.getDate() + 1)
-  const d = new Date(s.scheduled_date + 'T00:00:00')
-  if (d.getTime() === today.getTime()) return `Today · ${s.time_slot}`
-  if (d.getTime() === tomorrow.getTime()) return `Tomorrow · ${s.time_slot}`
-  return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${s.time_slot}`
+function formatShortDate(s: DashboardSession, viewerTz: string): string {
+  const converted = convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)
+  const utc = converted?.utc ?? new Date(s.scheduled_date + 'T00:00:00')
+  return new Intl.DateTimeFormat('en-US', { timeZone: viewerTz, month: 'short', day: 'numeric' }).format(utc)
 }
 
-function isWithinSessionWindow(scheduledDate: string, timeSlot: string): boolean {
-  const match = timeSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-  if (!match) return false
-  let hours = parseInt(match[1], 10)
-  const minutes = parseInt(match[2], 10)
-  const period = match[3].toUpperCase()
-  if (period === 'PM' && hours !== 12) hours += 12
-  if (period === 'AM' && hours === 12) hours = 0
-  const sessionStart = new Date(`${scheduledDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
-  const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000)
-  const now = new Date()
-  const earlyJoin = new Date(sessionStart.getTime() - 10 * 60 * 1000)
-  return now >= earlyJoin && now <= sessionEnd
+function formatWhen(s: DashboardSession, viewerTz: string): string {
+  const converted = convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)
+  if (!converted) return `${s.scheduled_date} · ${s.time_slot}`
+  const todayLocal = new Date()
+  const ymdInTz = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: viewerTz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d)
+  const todayStr = ymdInTz(todayLocal)
+  const tomorrow = new Date(todayLocal.getTime() + 24 * 60 * 60 * 1000)
+  const tomorrowStr = ymdInTz(tomorrow)
+  if (converted.date === todayStr) return `Today · ${converted.time}`
+  if (converted.date === tomorrowStr) return `Tomorrow · ${converted.time}`
+  const datePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: viewerTz,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(converted.utc)
+  return `${datePart} · ${converted.time}`
 }
 
-function nextSessionTeaser(sessions: DashboardSession[]): string {
+function isWithinSessionWindow(s: DashboardSession): boolean {
+  return isWithinWindow(s.scheduled_date, s.time_slot, sessionSourceTz(s))
+}
+
+function nextSessionTeaser(sessions: DashboardSession[], viewerTz: string): string {
   if (sessions.length === 0) return 'No upcoming sessions yet.'
   const s = sessions[0]
-  return `Your next one is ${formatWhen(s).toLowerCase()} with ${s.student_name}.`
+  return `Your next one is ${formatWhen(s, viewerTz).toLowerCase()} with ${s.student_name}.`
 }
 
 function relativeTime(dateStr: string): string {
@@ -486,7 +502,11 @@ function SessRow({
   onCancel?: (id: string) => void
   cancelling?: string | null
 }) {
-  const canJoin = !past && s.status === 'confirmed' && isWithinSessionWindow(s.scheduled_date, s.time_slot)
+  const viewerTz = useViewerTimezone()
+  // canJoin uses the session's stored source tz (via isWithinSessionWindow),
+  // not the viewer's display tz — the live-window math is the same instant
+  // regardless of where the tutor is currently sitting.
+  const canJoin = !past && s.status === 'confirmed' && isWithinSessionWindow(s)
   const priceLabel = (parseFloat(String(s.price)) || 0) > 0 ? `+$${Math.round(parseFloat(String(s.price)))}` : ''
 
   return (
@@ -495,7 +515,7 @@ function SessRow({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: '#1C1B1F' }}>{s.student_name}</div>
         <div style={{ fontSize: 12, color: '#5A5862', marginTop: 2 }}>
-          {s.student_sub ? `${s.student_sub} · ` : ''}{formatWhen(s)}
+          {s.student_sub ? `${s.student_sub} · ` : ''}{formatWhen(s, viewerTz)}
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
@@ -556,6 +576,7 @@ function PanelHome({
   const { profile, stats, upcoming, weekly, topStudents } = data
   const firstName = profile.name.split(' ')[0] || 'there'
   const weekTotal = weekly.reduce((a, d) => a + d.val, 0)
+  const viewerTz = useViewerTimezone()
 
   return (
     <div>
@@ -590,7 +611,7 @@ function PanelHome({
         </h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.88)', maxWidth: 480, lineHeight: 1.55 }}>
           You have <strong style={{ color: 'white' }}>{stats.upcomingCount} upcoming session{stats.upcomingCount === 1 ? '' : 's'}</strong>.{' '}
-          {nextSessionTeaser(upcoming)}
+          {nextSessionTeaser(upcoming, viewerTz)}
         </p>
         <div style={{ display: 'flex', gap: 16, marginTop: 20, flexWrap: 'wrap' }}>
           {[
@@ -689,6 +710,7 @@ function PanelSessions({
 }) {
   const [tab, setTab] = useState<'upcoming' | 'completed'>('upcoming')
   const list = tab === 'upcoming' ? upcoming : past
+  const viewerTz = useViewerTimezone()
 
   return (
     <div>
@@ -716,7 +738,7 @@ function PanelSessions({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{s.student_name}</div>
                 <div style={{ fontSize: 12, color: '#5A5862', marginTop: 2 }}>
-                  {s.student_sub ? `${s.student_sub} · ` : ''}{formatShortDate(s.scheduled_date)} · {s.time_slot}
+                  {s.student_sub ? `${s.student_sub} · ` : ''}{formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
                 </div>
               </div>
               {s.status === 'cancelled' ? (
@@ -756,6 +778,7 @@ function PanelEarnings({ data }: { data: DashboardData }) {
   const { stats, weekly, monthly, past } = data
   const [tab, setTab] = useState<'weekly' | 'monthly'>('weekly')
   const completedTxns = past.filter((s) => s.status === 'completed')
+  const viewerTz = useViewerTimezone()
 
   return (
     <div>
@@ -810,7 +833,7 @@ function PanelEarnings({ data }: { data: DashboardData }) {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>{s.student_name}</div>
                 <div style={{ fontSize: 12, color: '#8A8792' }}>
-                  {formatShortDate(s.scheduled_date)} · {s.time_slot}
+                  {formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
                 </div>
               </div>
               <Pill color="green">+${Math.round(parseFloat(String(s.price)) || 0)}</Pill>
@@ -1762,6 +1785,7 @@ export default function TutorDashboard() {
   const [panel, setPanel] = useState<PanelId>('home')
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const viewerTz = useViewerTimezone()
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -2133,7 +2157,7 @@ export default function TutorDashboard() {
                           fontSize: 12,
                         }}
                       >
-                        <strong>{s.student_name}</strong> · {formatShortDate(s.scheduled_date)} · {s.time_slot}
+                        <strong>{s.student_name}</strong> · {formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
                       </button>
                     ))}
                   </div>
@@ -2158,6 +2182,7 @@ export default function TutorDashboard() {
               >
                 <ClipboardList size={14} /> My Tests
               </Link>
+              <TimezoneSelector />
               <Link
                 href="/sessions"
                 title="Notifications"

@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { PhotoCropModal } from '@/components/photo-crop-modal'
+import { getBrowserTimezone, shortTimezoneLabel } from '@/lib/timezone'
 
 const STEPS = [
   { label: 'Basic Info', icon: User },
@@ -266,7 +267,9 @@ export default function OnboardingPage() {
     await fetch('/api/tutor/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...profile, profileCompleted: false }),
+      // Capture the tutor's browser timezone alongside their slots so the
+      // wall-clock times can be displayed correctly to students elsewhere.
+      body: JSON.stringify({ ...profile, profileCompleted: false, timezone: getBrowserTimezone() }),
     })
   }
 
@@ -275,7 +278,7 @@ export default function OnboardingPage() {
     await fetch('/api/tutor/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...profile, profileCompleted: true }),
+      body: JSON.stringify({ ...profile, profileCompleted: true, timezone: getBrowserTimezone() }),
     })
     setSaving(false)
     router.push('/home')
@@ -604,6 +607,9 @@ export default function OnboardingPage() {
                   <h2 className="text-xl font-semibold text-foreground mb-1">Your Availability</h2>
                   <p className="text-sm text-muted-foreground">
                     Tap the time slots when you{"'"}re available. You can update this later.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Shown in your local timezone (<span className="font-medium text-foreground">{shortTimezoneLabel(getBrowserTimezone())}</span>). Students will see these in their own timezone.
                   </p>
                 </div>
 

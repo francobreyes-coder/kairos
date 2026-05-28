@@ -7,6 +7,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
 import { StudentSidebar, type SidebarItemId } from '@/components/student-sidebar'
 import { PhotoCropModal } from '@/components/photo-crop-modal'
+import { DEFAULT_TIMEZONE, convertSlotToTimezone } from '@/lib/timezone'
+import { useViewerTimezone } from '@/lib/use-viewer-timezone'
+import { TimezoneSelector } from '@/components/timezone-selector'
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Design tokens (scoped to dashboard via :root override on the wrapper)
@@ -176,6 +179,7 @@ interface ApiSession {
   student_name: string
   tutor_name: string
   is_tutor: boolean
+  timezone: string | null
 }
 
 interface ApiConversation {
@@ -205,34 +209,60 @@ function emojiForExam(exam: 'SAT' | 'ACT'): string {
   return exam === 'SAT' ? '📝' : '🔬'
 }
 
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+function sessionSourceTz(s: ApiSession): string {
+  return s.timezone || DEFAULT_TIMEZONE
+}
+
+// Returns the session's start instant (UTC) or null if the slot can't be parsed.
+function sessionStartUtc(s: ApiSession): Date | null {
+  return convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), 'UTC')?.utc ?? null
 }
 
 function isUpcoming(s: ApiSession): boolean {
-  return s.status === 'confirmed' && s.scheduled_date >= todayISO()
+  if (s.status !== 'confirmed') return false
+  const start = sessionStartUtc(s)
+  if (!start) return false
+  // Keep upcoming until the session's full hour has elapsed.
+  return start.getTime() + 60 * 60 * 1000 >= Date.now()
 }
 
 function isPast(s: ApiSession): boolean {
-  return s.status !== 'confirmed' || s.scheduled_date < todayISO()
+  if (s.status !== 'confirmed') return true
+  const start = sessionStartUtc(s)
+  if (!start) return true
+  return start.getTime() + 60 * 60 * 1000 < Date.now()
 }
 
-function formatSessionWhen(s: ApiSession): string {
-  const date = new Date(s.scheduled_date + 'T00:00:00')
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today.getTime() + 86400000)
-  const sameDay = date.toDateString() === today.toDateString()
-  const isTomorrow = date.toDateString() === tomorrow.toDateString()
-  if (sameDay) return `Today · ${s.time_slot}`
-  if (isTomorrow) return `Tomorrow · ${s.time_slot}`
-  const month = date.toLocaleDateString('en-US', { month: 'short' })
-  return `${month} ${date.getDate()} · ${s.time_slot}`
+function formatSessionWhen(s: ApiSession, viewerTz: string): string {
+  const converted = convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)
+  if (!converted) return `${s.scheduled_date} · ${s.time_slot}`
+  const ymdInTz = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: viewerTz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d)
+  const todayStr = ymdInTz(new Date())
+  const tomorrowStr = ymdInTz(new Date(Date.now() + 86400000))
+  if (converted.date === todayStr) return `Today · ${converted.time}`
+  if (converted.date === tomorrowStr) return `Tomorrow · ${converted.time}`
+  const datePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: viewerTz,
+    month: 'short',
+    day: 'numeric',
+  }).format(converted.utc)
+  return `${datePart} · ${converted.time}`
 }
 
-function formatPastWhen(s: ApiSession): string {
-  const date = new Date(s.scheduled_date + 'T00:00:00')
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function formatPastWhen(s: ApiSession, viewerTz: string): string {
+  const converted = convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)
+  if (!converted) return s.scheduled_date
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: viewerTz,
+    month: 'short',
+    day: 'numeric',
+  }).format(converted.utc)
 }
 
 function relativeTime(iso: string): string {
@@ -253,6 +283,7 @@ function relativeTime(iso: string): string {
 function SessionRow({ s, onJoin, onViewNotes }: { s: ApiSession; onJoin?: () => void; onViewNotes?: () => void }) {
   const counterpart = s.is_tutor ? s.student_name : s.tutor_name
   const upcoming = isUpcoming(s)
+  const viewerTz = useViewerTimezone()
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
@@ -267,7 +298,7 @@ function SessionRow({ s, onJoin, onViewNotes }: { s: ApiSession; onJoin?: () => 
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--graphite)', display: 'inline-flex', alignItems: 'center' }}>
-          {Icon.cal()} {upcoming ? formatSessionWhen(s) : formatPastWhen(s)}
+          {Icon.cal()} {upcoming ? formatSessionWhen(s, viewerTz) : formatPastWhen(s, viewerTz)}
         </span>
         {upcoming
           ? <BtnPrimary onClick={onJoin}>{Icon.play()} Join</BtnPrimary>
@@ -333,6 +364,7 @@ function PanelHome({
   const upcoming = sessions.filter(isUpcoming)
   const past = sessions.filter(isPast)
   const nextSession = upcoming[0]
+  const viewerTz = useViewerTimezone()
 
   return (
     <div>
@@ -350,7 +382,7 @@ function PanelHome({
         </h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.88)', maxWidth: 380, lineHeight: 1.55 }}>
           {nextSession
-            ? <>Your next session with <strong style={{ color: 'white' }}>{nextSession.is_tutor ? nextSession.student_name : nextSession.tutor_name}</strong> is {formatSessionWhen(nextSession).toLowerCase()}.</>
+            ? <>Your next session with <strong style={{ color: 'white' }}>{nextSession.is_tutor ? nextSession.student_name : nextSession.tutor_name}</strong> is {formatSessionWhen(nextSession, viewerTz).toLowerCase()}.</>
             : <>No upcoming sessions yet — find a tutor to get started.</>}
         </p>
         <div style={{ display: 'flex', gap: 16, marginTop: 20, flexWrap: 'wrap' }}>
@@ -453,8 +485,8 @@ function PanelEssays({
       {tab === 'drafts' && (
         <Card style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>✍️</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Essay drafts coming soon</div>
-          <div style={{ fontSize: 12, color: 'var(--mute)' }}>Your tutor will be able to assign drafts here for you to work on.</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>You haven't uploaded any essay drafts yet</div>
+          <div style={{ fontSize: 12, color: 'var(--mute)' }}>Upload them here to get feedback.</div>
         </Card>
       )}
       {tab === 'sessions' && (
@@ -583,8 +615,8 @@ function PanelActivities({
       {tab === 'list' && (
         <Card style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>🎯</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Activities list coming soon</div>
-          <div style={{ fontSize: 12, color: 'var(--mute)' }}>Build out your Common App activities list with help from your tutor.</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>You haven't uploaded any activities yet</div>
+          <div style={{ fontSize: 12, color: 'var(--mute)' }}>Build out your activities list with help from your tutor.</div>
         </Card>
       )}
       {tab === 'sessions' && (
@@ -1415,6 +1447,7 @@ function StudentDashboardInner() {
                 fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', outline: 'none',
               }} />
             </div>
+            <TimezoneSelector />
             <div style={{ width: 36, height: 36, borderRadius: 10, border: '1.5px solid var(--hair)', background: 'var(--s1)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--graphite)' }}>
               {Icon.bell()}
             </div>

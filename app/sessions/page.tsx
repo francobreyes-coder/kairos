@@ -16,6 +16,13 @@ import {
   Video,
   FileText,
 } from 'lucide-react'
+import {
+  DEFAULT_TIMEZONE,
+  convertSlotToTimezone,
+  isWithinSessionWindow as isWithinWindow,
+} from '@/lib/timezone'
+import { useViewerTimezone } from '@/lib/use-viewer-timezone'
+import { TimezoneSelector } from '@/components/timezone-selector'
 
 interface Session {
   id: string
@@ -30,6 +37,7 @@ interface Session {
   student_name: string
   tutor_name: string
   is_tutor: boolean
+  timezone: string | null
 }
 
 export default function SessionsPage() {
@@ -40,6 +48,7 @@ export default function SessionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const viewerTz = useViewerTimezone()
   // IDs of sessions whose Daily.co room is currently in use. Polled
   // separately so the Join button appears as soon as the counterpart
   // joins, even if the scheduled time window has passed or hasn't started.
@@ -113,50 +122,51 @@ export default function SessionsPage() {
     }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  function sourceTz(s: Session): string {
+    return s.timezone || DEFAULT_TIMEZONE
+  }
 
-  // Treat any session with a live room as "upcoming" so the Join button
-  // is reachable, even if the scheduled date already rolled to "past"
-  // (timezone drift, long-running call, etc.).
-  const upcoming = sessions.filter(
-    (s) =>
-      s.status === 'confirmed' &&
-      (s.scheduled_date >= today || activeIds.has(s.id)),
-  )
-  const past = sessions.filter(
-    (s) =>
-      s.status !== 'confirmed' ||
-      (s.scheduled_date < today && !activeIds.has(s.id)),
-  )
+  // Convert a session's stored (date, time, sourceTz) into the viewer's tz.
+  // Returns the original strings if the slot can't be parsed.
+  function viewerView(s: Session) {
+    const converted = convertSlotToTimezone(s.scheduled_date, s.time_slot, sourceTz(s), viewerTz)
+    if (!converted) return { date: s.scheduled_date, time: s.time_slot, utc: null as Date | null }
+    return { date: converted.date, time: converted.time, utc: converted.utc }
+  }
+
+  // Compare against "now" rather than a date string so timezone shifts that
+  // move the session past midnight don't misclassify it.
+  const nowMs = Date.now()
+  const upcoming = sessions.filter((s) => {
+    if (s.status !== 'confirmed') return false
+    if (activeIds.has(s.id)) return true
+    const utc = viewerView(s).utc
+    // Keep visible for the full ~1h session window after start, then drop.
+    return utc !== null && utc.getTime() + 60 * 60 * 1000 >= nowMs
+  })
+  const past = sessions.filter((s) => {
+    if (s.status !== 'confirmed') return true
+    if (activeIds.has(s.id)) return false
+    const utc = viewerView(s).utc
+    return utc !== null && utc.getTime() + 60 * 60 * 1000 < nowMs
+  })
 
   const displayed = tab === 'upcoming' ? upcoming : past
 
-  function isWithinSessionWindow(scheduledDate: string, timeSlot: string): boolean {
-    const match = timeSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-    if (!match) return false
-
-    let hours = parseInt(match[1], 10)
-    const minutes = parseInt(match[2], 10)
-    const period = match[3].toUpperCase()
-    if (period === 'PM' && hours !== 12) hours += 12
-    if (period === 'AM' && hours === 12) hours = 0
-
-    const sessionStart = new Date(`${scheduledDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
-    const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000)
-    const now = new Date()
-    const earlyJoin = new Date(sessionStart.getTime() - 10 * 60 * 1000)
-
-    return now >= earlyJoin && now <= sessionEnd
+  function isSessionLive(s: Session): boolean {
+    return isWithinWindow(s.scheduled_date, s.time_slot, sourceTz(s))
   }
 
-  function formatDate(dateStr: string): string {
-    const d = new Date(dateStr + 'T00:00:00')
-    return d.toLocaleDateString('en-US', {
+  function formatDate(s: Session): string {
+    const utc = viewerView(s).utc
+    if (!utc) return s.scheduled_date
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: viewerTz,
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    })
+    }).format(utc)
   }
 
   function statusBadge(s: string) {
@@ -225,13 +235,16 @@ export default function SessionsPage() {
       <main className="min-h-screen pt-28 pb-24 px-6">
         <div className="mx-auto max-w-3xl">
           {/* Page header */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-foreground mb-2">My Sessions</h1>
-            <p className="text-muted-foreground">
-              {session?.user?.role === 'tutor'
-                ? 'Manage sessions with your students.'
-                : 'Track your upcoming and past tutoring sessions.'}
-            </p>
+          <div className="mb-6 flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground mb-2">My Sessions</h1>
+              <p className="text-muted-foreground">
+                {session?.user?.role === 'tutor'
+                  ? 'Manage sessions with your students.'
+                  : 'Track your upcoming and past tutoring sessions.'}
+              </p>
+            </div>
+            <TimezoneSelector />
           </div>
 
           {/* Tabs */}
@@ -301,15 +314,15 @@ export default function SessionsPage() {
                         </span>
                       </div>
 
-                      {/* Date + time */}
+                      {/* Date + time (in viewer's tz) */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5" />
-                          {formatDate(s.scheduled_date)}
+                          {formatDate(s)}
                         </span>
                         <span className="inline-flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5" />
-                          {s.time_slot}
+                          {viewerView(s).time}
                         </span>
                       </div>
 
@@ -324,8 +337,7 @@ export default function SessionsPage() {
                     <div className="flex flex-col items-end gap-2">
                       {statusBadge(s.status)}
                       {s.status === 'confirmed' &&
-                        (activeIds.has(s.id) ||
-                          isWithinSessionWindow(s.scheduled_date, s.time_slot)) && (
+                        (activeIds.has(s.id) || isSessionLive(s)) && (
                           <button
                             onClick={() => router.push(`/session/${s.id}`)}
                             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"
@@ -334,7 +346,7 @@ export default function SessionsPage() {
                             {activeIds.has(s.id) ? 'Join Call · Live' : 'Join Call'}
                           </button>
                         )}
-                      {s.status === 'confirmed' && s.scheduled_date >= today && (
+                      {s.status === 'confirmed' && upcoming.some((u) => u.id === s.id) && (
                         <button
                           onClick={() => cancelSession(s.id)}
                           disabled={cancelling === s.id}

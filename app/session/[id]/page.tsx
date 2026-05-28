@@ -18,6 +18,8 @@ import {
   User,
   Wifi,
 } from 'lucide-react'
+import { DEFAULT_TIMEZONE, convertSlotToTimezone, parseSlotTime, zonedTimeToUtc } from '@/lib/timezone'
+import { useViewerTimezone } from '@/lib/use-viewer-timezone'
 
 interface SessionInfo {
   id: string
@@ -29,6 +31,7 @@ interface SessionInfo {
   student_name: string
   tutor_name: string
   is_tutor: boolean
+  timezone: string | null
 }
 
 type ConnectionState = 'idle' | 'loading' | 'joining' | 'joined' | 'error' | 'left'
@@ -77,16 +80,15 @@ export default function VideoSessionPage() {
     if (!sessionInfo) return
 
     function updateTimer() {
-      const match = sessionInfo!.time_slot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-      if (!match) return
-
-      let hours = parseInt(match[1], 10)
-      const minutes = parseInt(match[2], 10)
-      const period = match[3].toUpperCase()
-      if (period === 'PM' && hours !== 12) hours += 12
-      if (period === 'AM' && hours === 12) hours = 0
-
-      const sessionStart = new Date(`${sessionInfo!.scheduled_date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
+      const parsed = parseSlotTime(sessionInfo!.time_slot)
+      if (!parsed) return
+      const sourceTz = sessionInfo!.timezone || DEFAULT_TIMEZONE
+      const sessionStart = zonedTimeToUtc(
+        sessionInfo!.scheduled_date,
+        parsed.hour,
+        parsed.minute,
+        sourceTz,
+      )
       const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000) // 1 hour session
       const now = new Date()
 
@@ -284,35 +286,41 @@ export default function VideoSessionPage() {
     }
   }, [])
 
+  const viewerTz = useViewerTimezone()
+
   // Check if session is within joinable window (10 min before to session end)
   function isWithinSessionWindow(): boolean {
     if (!sessionInfo) return false
-    const match = sessionInfo.time_slot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-    if (!match) return true // Allow if we can't parse
-
-    let hours = parseInt(match[1], 10)
-    const minutes = parseInt(match[2], 10)
-    const period = match[3].toUpperCase()
-    if (period === 'PM' && hours !== 12) hours += 12
-    if (period === 'AM' && hours === 12) hours = 0
-
-    const sessionStart = new Date(`${sessionInfo.scheduled_date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
-    const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000)
-    const now = new Date()
-
-    const earlyJoin = new Date(sessionStart.getTime() - 10 * 60 * 1000) // 10 min before
-
+    const parsed = parseSlotTime(sessionInfo.time_slot)
+    if (!parsed) return true
+    const sourceTz = sessionInfo.timezone || DEFAULT_TIMEZONE
+    const sessionStart = zonedTimeToUtc(
+      sessionInfo.scheduled_date,
+      parsed.hour,
+      parsed.minute,
+      sourceTz,
+    )
+    const sessionEnd = sessionStart.getTime() + 60 * 60 * 1000
+    const earlyJoin = sessionStart.getTime() - 10 * 60 * 1000
+    const now = Date.now()
     return now >= earlyJoin && now <= sessionEnd
   }
 
-  function formatDate(dateStr: string): string {
-    const d = new Date(dateStr + 'T00:00:00')
-    return d.toLocaleDateString('en-US', {
+  function formatDate(s: SessionInfo): string {
+    const converted = convertSlotToTimezone(
+      s.scheduled_date,
+      s.time_slot,
+      s.timezone || DEFAULT_TIMEZONE,
+      viewerTz,
+    )
+    const d = converted?.utc ?? new Date(s.scheduled_date + 'T00:00:00')
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: viewerTz,
       weekday: 'long',
       month: 'long',
       day: 'numeric',
       year: 'numeric',
-    })
+    }).format(d)
   }
 
   // Loading state
@@ -496,11 +504,16 @@ export default function VideoSessionPage() {
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Calendar className="w-3.5 h-3.5" />
-                  {formatDate(sessionInfo!.scheduled_date)}
+                  {formatDate(sessionInfo!)}
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Clock className="w-3.5 h-3.5" />
-                  {sessionInfo!.time_slot}
+                  {convertSlotToTimezone(
+                    sessionInfo!.scheduled_date,
+                    sessionInfo!.time_slot,
+                    sessionInfo!.timezone || DEFAULT_TIMEZONE,
+                    viewerTz,
+                  )?.time ?? sessionInfo!.time_slot}
                 </div>
               </div>
 

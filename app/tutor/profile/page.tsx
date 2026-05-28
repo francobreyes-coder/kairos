@@ -19,6 +19,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { PhotoCropModal } from '@/components/photo-crop-modal'
+import { getBrowserTimezone, shortTimezoneLabel } from '@/lib/timezone'
 
 const SUBJECT_OPTIONS = [
   'English / Writing',
@@ -85,6 +86,7 @@ interface ProfileData {
   teachingStyle: string
   availability: Record<string, string[]>
   services: string[]
+  timezone: string
 }
 
 const inputCls =
@@ -141,6 +143,7 @@ export default function ProfileDashboard() {
           teachingStyle: existing.teaching_style ?? '',
           availability: existing.availability ?? {},
           services: existing.services ?? [],
+          timezone: existing.timezone ?? '',
         }
         setProfile(loaded)
         setLoading(false)
@@ -162,10 +165,16 @@ export default function ProfileDashboard() {
   async function saveEdit() {
     if (!editDraft) return
     setSaving(true)
+    // When saving availability, also record the browser's IANA timezone so
+    // the slot strings can be interpreted as wall-clock in that tz.
+    const payload: Record<string, unknown> = { ...editDraft, profileCompleted: true }
+    if (editing === 'availability') {
+      payload.timezone = getBrowserTimezone()
+    }
     await fetch('/api/tutor/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...editDraft, profileCompleted: true }),
+      body: JSON.stringify(payload),
     })
     setProfile(editDraft)
     setEditing(null)
@@ -665,6 +674,10 @@ export default function ProfileDashboard() {
             >
               {editing === 'availability' && editDraft ? (
                 <div className="overflow-x-auto -mx-2 px-2">
+                  <p className="text-xs text-muted-foreground mb-3 px-1">
+                    Times shown in your local timezone (<span className="font-medium text-foreground">{shortTimezoneLabel(getBrowserTimezone())}</span>).
+                    Students see them in their own timezone.
+                  </p>
                   <div className="min-w-[560px]">
                     <div className="grid grid-cols-8 gap-1 mb-1">
                       <div className="text-xs text-muted-foreground p-1" />
@@ -698,6 +711,11 @@ export default function ProfileDashboard() {
                 </div>
               ) : (
                 <div className="space-y-1.5">
+                  {profile.timezone && totalSlots > 0 && (
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Stored in <span className="font-medium text-foreground">{shortTimezoneLabel(profile.timezone)}</span>; students see these in their own timezone.
+                    </p>
+                  )}
                   {DAYS.filter((d) => (profile.availability[d] ?? []).length > 0).map((d) => (
                     <div key={d} className="text-sm">
                       <span className="font-medium text-foreground w-24 inline-block">{d}</span>
