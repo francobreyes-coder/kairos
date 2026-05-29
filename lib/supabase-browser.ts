@@ -14,6 +14,15 @@ export function getBrowserSupabase(): SupabaseClient {
     )
   }
   client = createClient(url, key, {
+    // App handles its own auth via cookies/middleware; we never sign in to
+    // Supabase. Disabling session management stops gotrue-js from holding the
+    // Web Locks auth lock, which otherwise contends with realtime subs +
+    // concurrent inserts and surfaces the 5s "lock not released" warning.
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
     realtime: { params: { eventsPerSecond: 20 } },
   })
   return client
