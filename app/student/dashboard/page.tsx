@@ -837,15 +837,15 @@ function PanelMessages({
   const activePartner = conversations.find((c) => c.partner_id === activeId)
   const myIdSet = new Set(myIds)
 
-  // The outer was display:grid with an implicit auto row, so the right
-  // column's `height: 100%` resolved against a content-sized row, not the
-  // container — the inner flex:1/overflow:auto body never engaged. Flex
-  // forces both columns to stretch to the container's fixed height.
+  // Size to the parent body wrapper (which already accounts for the topbar
+  // and outer padding) rather than computing against 100vh, which is brittle
+  // if the topbar or padding ever changes. The header and input rows get
+  // flexShrink:0 so the body can never push them out of view.
   return (
     <div style={{
       display: 'flex',
       background: 'var(--s0)', borderRadius: 16, boxShadow: 'var(--sh1)',
-      overflow: 'hidden', height: 'calc(100vh - 168px)',
+      overflow: 'hidden', height: '100%', minHeight: 0,
     }}>
       <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--hair)', overflowY: 'auto' }}>
         <div style={{ padding: '14px 16px 10px', fontSize: 13, fontWeight: 700, color: 'var(--ink)', borderBottom: '1px solid var(--hair)' }}>Conversations</div>
@@ -871,7 +871,7 @@ function PanelMessages({
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {activePartner ? (
           <>
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               <Avatar initials={initialsOf(activePartner.partner_name)} color={avatarColor(activePartner.partner_id)} size={36} />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{activePartner.partner_name}</div>
@@ -907,7 +907,7 @@ function PanelMessages({
                 )
               })}
             </div>
-            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--hair)', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--hair)', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, background: 'var(--s0)' }}>
               <input
                 value={input} onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') send() }}

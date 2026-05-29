@@ -1154,10 +1154,10 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
 
   const tutorInitials = initialsOf(session?.user?.name ?? '?')
 
-  // Outer was display:grid with implicit auto row, so the right column's
-  // `height: 100%` resolved against a content-sized row, not the container —
-  // the inner flex:1/overflow:auto body never engaged. Flex forces both
-  // columns to stretch to the container's fixed height.
+  // Size to the parent body wrapper (which already accounts for the topbar
+  // and outer padding) rather than computing against 100vh, which is brittle
+  // if the topbar or padding ever changes. The header and input rows get
+  // flexShrink:0 so the body can never push them out of view.
   return (
     <div
       style={{
@@ -1166,7 +1166,8 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
         borderRadius: 16,
         boxShadow: '0 1px 2px rgba(28,27,31,.04), 0 2px 6px rgba(28,27,31,.05)',
         overflow: 'hidden',
-        height: 'calc(100vh - 168px)',
+        height: '100%',
+        minHeight: 0,
       }}
     >
       {/* Sidebar */}
@@ -1223,7 +1224,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
           </div>
         ) : (
           <>
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid #E6E3E8', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #E6E3E8', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               <Avatar initials={initialsOf(active.name)} color={avatarColor(active.id)} size={36} />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{active.name}</div>
@@ -1285,7 +1286,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
               </div>
             )}
 
-            <div style={{ padding: '12px 16px', borderTop: '1px solid #E6E3E8', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #E6E3E8', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, background: 'white' }}>
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
