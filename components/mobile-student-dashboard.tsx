@@ -40,6 +40,16 @@ interface AssignedTest {
   question_count: number
   created_at: string
   tutor_name: string | null
+  // Newer endpoints decorate each test with the student's latest attempt so
+  // the card can show the score and route to review instead of restart.
+  // Optional so older callers (and the not-yet-attempted case) still type-check.
+  last_attempt?: {
+    id: string
+    correct_count: number
+    total_count: number
+    submitted_at: string
+  } | null
+  attempt_count?: number
 }
 
 interface ApiConversation {
@@ -463,27 +473,44 @@ function HomeBody({
           {tests.length === 0 ? (
             <EmptyState title="No assignments yet" sub="Your tutor will post practice tests here." />
           ) : (
-            tests.slice(0, 3).map((t) => (
-              <div
-                key={t.id}
-                onClick={() => onStartTest(t.id)}
-                style={{
-                  padding: '14px 0',
-                  borderBottom: '1px solid #E6E3E8',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F', lineHeight: 1.35, flex: 1 }}>
-                    {t.name}
+            tests.slice(0, 3).map((t) => {
+              const la = t.last_attempt ?? null
+              const pct = la && la.total_count > 0
+                ? Math.round((la.correct_count / la.total_count) * 100)
+                : null
+              const href = la
+                ? `/student/tests/${t.id}?review=${la.id}`
+                : `/student/tests/${t.id}`
+              const badgeColor: 'green' | 'amber' | 'pink' | 'purple' = pct === null
+                ? 'purple'
+                : pct >= 80 ? 'green' : pct >= 60 ? 'amber' : 'pink'
+              const badgeLabel = pct === null ? t.exam_type : `${pct}%`
+              return (
+                <a
+                  key={t.id}
+                  href={href}
+                  style={{
+                    display: 'block',
+                    padding: '14px 0',
+                    borderBottom: '1px solid #E6E3E8',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F', lineHeight: 1.35, flex: 1 }}>
+                      {t.name}
+                    </div>
+                    <Pill color={badgeColor}>{badgeLabel}</Pill>
                   </div>
-                  <Pill color="purple">{t.exam_type}</Pill>
-                </div>
-                <div style={{ fontSize: 10, color: '#8A8792', marginTop: 4 }}>
-                  {t.tutor_name ? `Assigned by ${t.tutor_name}` : 'Assignment'} · {t.question_count} questions
-                </div>
-              </div>
-            ))
+                  <div style={{ fontSize: 10, color: '#8A8792', marginTop: 4 }}>
+                    {la
+                      ? `${la.correct_count}/${la.total_count} correct · tap to review`
+                      : `${t.tutor_name ? `Assigned by ${t.tutor_name}` : 'Assignment'} · ${t.question_count} questions`}
+                  </div>
+                </a>
+              )
+            })
           )}
         </Card>
       </SectionContainer>
@@ -694,13 +721,14 @@ function Avatar({ initials, color, size = 40, border = false }: { initials: stri
   )
 }
 
-type PillColor = 'purple' | 'amber' | 'green' | 'mute'
+type PillColor = 'purple' | 'amber' | 'green' | 'mute' | 'pink'
 function Pill({ children, color = 'purple' }: { children: React.ReactNode; color?: PillColor }) {
   const palette: Record<PillColor, { bg: string; fg: string }> = {
     purple: { bg: '#ECE7FC', fg: '#6C52E0' },
     amber: { bg: '#FEF3CD', fg: '#A06B00' },
     green: { bg: '#D6F5E8', fg: '#1E7A4F' },
     mute: { bg: '#F1EFE9', fg: '#5A5862' },
+    pink: { bg: '#FCE7F8', fg: '#A0219E' },
   }
   const s = palette[color]
   return (

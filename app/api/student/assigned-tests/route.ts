@@ -10,6 +10,16 @@ export interface AssignedTest {
   question_count: number
   created_at: string
   tutor_name: string | null
+  // Latest attempt for this student against this test, if they've finished
+  // one. The dashboard uses this to switch the card from "Start" to
+  // "Review results" and to display the score.
+  last_attempt: {
+    id: string
+    correct_count: number
+    total_count: number
+    submitted_at: string
+  } | null
+  attempt_count: number
 }
 
 export async function GET() {
@@ -81,6 +91,31 @@ export async function GET() {
     }
   }
 
+  // Pull every attempt this student has against the assigned tests in one
+  // query, then collapse to "latest per test + total count" client-side. The
+  // student_id stored on test_attempts is whichever candidate id was logged
+  // in at submit time, so the IN-set has to span all of them.
+  const { data: attempts } = await supabase
+    .from('test_attempts')
+    .select('id, test_id, correct_count, total_count, submitted_at')
+    .in('test_id', testIds)
+    .in('student_id', candidateIds)
+    .order('submitted_at', { ascending: false })
+
+  const latestByTest = new Map<string, NonNullable<AssignedTest['last_attempt']>>()
+  const countByTest = new Map<string, number>()
+  for (const a of attempts ?? []) {
+    countByTest.set(a.test_id, (countByTest.get(a.test_id) ?? 0) + 1)
+    if (!latestByTest.has(a.test_id)) {
+      latestByTest.set(a.test_id, {
+        id: a.id,
+        correct_count: a.correct_count,
+        total_count: a.total_count,
+        submitted_at: a.submitted_at,
+      })
+    }
+  }
+
   const out: AssignedTest[] = (tests ?? [])
     .map((t) => ({
       id: t.id,
@@ -89,6 +124,8 @@ export async function GET() {
       question_count: t.question_count,
       created_at: t.created_at,
       tutor_name: tutorNameByKey.get(t.tutor_id) || null,
+      last_attempt: latestByTest.get(t.id) ?? null,
+      attempt_count: countByTest.get(t.id) ?? 0,
     }))
     .sort((a, b) =>
       (assignmentOrder.get(b.id) ?? '').localeCompare(assignmentOrder.get(a.id) ?? ''),

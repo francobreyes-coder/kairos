@@ -108,6 +108,18 @@ interface DashboardData {
   topStudents: TopStudent[]
 }
 
+interface TutorAttempt {
+  id: string
+  test_id: string
+  test_name: string
+  exam_type: 'SAT' | 'ACT'
+  student_id: string
+  student_name: string | null
+  correct_count: number
+  total_count: number
+  submitted_at: string
+}
+
 interface Conversation {
   partner_id: string
   partner_name: string
@@ -570,9 +582,11 @@ function SessRow({
 
 function PanelHome({
   data,
+  attempts,
   setPanel,
 }: {
   data: DashboardData
+  attempts: TutorAttempt[]
   setPanel: (p: PanelId) => void
 }) {
   const { profile, stats, upcoming, weekly, topStudents } = data
@@ -688,6 +702,52 @@ function PanelHome({
                 <Pill color="purple">{t.count} session{t.count === 1 ? '' : 's'}</Pill>
               </div>
             ))
+          )}
+        </Card>
+      </div>
+
+      {/* Recent practice-test submissions. Each row is a "I just finished
+          their assigned test" event — clicking opens the review page so the
+          tutor can see right/wrong per question. The inbox notification is
+          the live ping; this card is the durable record. */}
+      <div style={{ marginTop: 24 }}>
+        <Card>
+          <SecHead title="Recent Practice Tests" />
+          {attempts.length === 0 ? (
+            <div style={{ padding: '24px 0', fontSize: 13, color: '#8A8792', textAlign: 'center' }}>
+              No submissions yet. Submissions land here as soon as a student finishes a test you assigned.
+            </div>
+          ) : (
+            attempts.slice(0, 6).map((a) => {
+              const pct = a.total_count > 0 ? Math.round((a.correct_count / a.total_count) * 100) : 0
+              const pillColor: 'green' | 'amber' | 'red' = pct >= 80 ? 'green' : pct >= 60 ? 'amber' : 'red'
+              const name = a.student_name ?? 'Student'
+              return (
+                <Link
+                  key={a.id}
+                  href={`/tutor/tests/${a.test_id}/attempts/${a.id}`}
+                  style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', borderBottom: '1px solid #E6E3E8' }}>
+                    <Avatar initials={initialsOf(name)} color={avatarColor(a.student_id)} size={40} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1C1B1F' }}>
+                        {name}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#5A5862', marginTop: 2 }}>
+                        Finished <strong>{a.test_name}</strong> · {relativeTime(a.submitted_at)} ago
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Pill color={pillColor}>
+                        {a.correct_count}/{a.total_count} · {pct}%
+                      </Pill>
+                      <BtnOutline>Review →</BtnOutline>
+                    </div>
+                  </div>
+                </Link>
+              )
+            })
           )}
         </Card>
       </div>
@@ -1778,6 +1838,7 @@ export default function TutorDashboard() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<DashboardData | null>(null)
+  const [attempts, setAttempts] = useState<TutorAttempt[]>([])
   const [error, setError] = useState<string | null>(null)
   const [errorKind, setErrorKind] = useState<'general' | 'no-profile' | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -1828,6 +1889,18 @@ export default function TutorDashboard() {
     if (status !== 'authenticated') return
     fetchDashboard()
   }, [status, fetchDashboard])
+
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    // Side-load practice-test submissions so the recent-attempts card on
+    // Home can render. The main dashboard endpoint doesn't include these
+    // because they're tutor-wide rather than per-profile and we'd rather
+    // not block the rest of the dashboard on a third roundtrip.
+    fetch('/api/tutor/attempts')
+      .then((r) => (r.ok ? r.json() : { attempts: [] }))
+      .then((d) => setAttempts(d.attempts ?? []))
+      .catch(() => setAttempts([]))
+  }, [status])
 
   async function cancelSession(sessionId: string) {
     setCancelling(sessionId)
@@ -2244,7 +2317,7 @@ export default function TutorDashboard() {
 
           {/* Panel content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px 48px' }}>
-            {panel === 'home' && <PanelHome data={data} setPanel={setPanel} />}
+            {panel === 'home' && <PanelHome data={data} attempts={attempts} setPanel={setPanel} />}
             {panel === 'sessions' && (
               <PanelSessions
                 upcoming={data.upcoming}

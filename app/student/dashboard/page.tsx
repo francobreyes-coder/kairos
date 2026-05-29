@@ -166,6 +166,13 @@ interface AssignedTest {
   question_count: number
   created_at: string
   tutor_name: string | null
+  last_attempt: {
+    id: string
+    correct_count: number
+    total_count: number
+    submitted_at: string
+  } | null
+  attempt_count: number
 }
 
 interface ApiSession {
@@ -352,6 +359,7 @@ function PanelHome({
   sessions,
   conversations,
   onStartTest,
+  onReviewAttempt,
   onJoinSession,
 }: {
   setPanel: (p: PanelKey) => void
@@ -361,6 +369,7 @@ function PanelHome({
   sessions: ApiSession[]
   conversations: ApiConversation[]
   onStartTest: (id: string) => void
+  onReviewAttempt: (testId: string, attemptId: string) => void
   onJoinSession: (id: string) => void
 }) {
   const upcoming = sessions.filter(isUpcoming)
@@ -420,22 +429,34 @@ function PanelHome({
           {tests.length === 0 ? (
             <EmptyState title="No practice tests assigned yet" />
           ) : (
-            tests.slice(0, 3).map((t) => (
-              <div key={t.id} onClick={() => onStartTest(t.id)} style={{
-                padding: '10px 0', borderBottom: '1px solid var(--hair)', cursor: 'pointer', transition: 'background .15s',
-              }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--s1)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>{t.name}</div>
-                  <Pill color="purple">{t.exam_type}</Pill>
+            tests.slice(0, 3).map((t) => {
+              const la = t.last_attempt
+              const pct = la && la.total_count > 0
+                ? Math.round((la.correct_count / la.total_count) * 100)
+                : null
+              const onClick = () =>
+                la ? onReviewAttempt(t.id, la.id) : onStartTest(t.id)
+              return (
+                <div key={t.id} onClick={onClick} style={{
+                  padding: '10px 0', borderBottom: '1px solid var(--hair)', cursor: 'pointer', transition: 'background .15s',
+                }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--s1)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>{t.name}</div>
+                    {pct !== null
+                      ? <Pill color={pct >= 80 ? 'green' : pct >= 60 ? 'amber' : 'pink'}>{pct}%</Pill>
+                      : <Pill color="purple">{t.exam_type}</Pill>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--mute)', marginTop: 3 }}>
+                    {la
+                      ? `${la.correct_count}/${la.total_count} correct · tap to review`
+                      : `Assigned by ${shortTutorName(t.tutor_name)} · ${t.question_count} questions`}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--mute)', marginTop: 3 }}>
-                  Assigned by {shortTutorName(t.tutor_name)} · {t.question_count} questions
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </Card>
 
@@ -520,6 +541,7 @@ function PanelTesting({
   loading,
   sessions,
   onStartTest,
+  onReviewAttempt,
   onJoinSession,
   onViewSessionNotes,
 }: {
@@ -527,6 +549,7 @@ function PanelTesting({
   loading: boolean
   sessions: ApiSession[]
   onStartTest: (id: string) => void
+  onReviewAttempt: (testId: string, attemptId: string) => void
   onJoinSession: (id: string) => void
   onViewSessionNotes: (id: string) => void
 }) {
@@ -550,27 +573,62 @@ function PanelTesting({
           </Card>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            {tests.map((t) => (
-              <Card key={t.id}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                    background: t.exam_type === 'SAT' ? 'var(--p100)' : '#FCE7F8',
-                    display: 'grid', placeItems: 'center', fontSize: 20,
-                  }}>{emojiForExam(t.exam_type)}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{t.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--mute)', marginTop: 2 }}>
-                      {t.question_count} questions · Assigned by {shortTutorName(t.tutor_name)}
+            {tests.map((t) => {
+              const la = t.last_attempt
+              const pct = la && la.total_count > 0
+                ? Math.round((la.correct_count / la.total_count) * 100)
+                : null
+              const statusColor: PillColor = la
+                ? pct !== null && pct >= 80 ? 'green' : pct !== null && pct >= 60 ? 'amber' : 'pink'
+                : 'mute'
+              const statusLabel = la
+                ? `${la.correct_count}/${la.total_count} · ${pct}%`
+                : 'Not Started'
+              return (
+                <Card key={t.id}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                      background: t.exam_type === 'SAT' ? 'var(--p100)' : '#FCE7F8',
+                      display: 'grid', placeItems: 'center', fontSize: 20,
+                    }}>{emojiForExam(t.exam_type)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{t.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--mute)', marginTop: 2 }}>
+                        {t.question_count} questions · Assigned by {shortTutorName(t.tutor_name)}
+                      </div>
+                      {la && (
+                        <div style={{ fontSize: 11, color: 'var(--mute)', marginTop: 2 }}>
+                          Last submitted {relativeTime(la.submitted_at)} ago
+                          {t.attempt_count > 1 ? ` · ${t.attempt_count} attempts` : ''}
+                        </div>
+                      )}
                     </div>
+                    <Pill color={statusColor}>{statusLabel}</Pill>
                   </div>
-                  <Pill color="mute">Not Started</Pill>
-                </div>
-                <div style={{ marginTop: 14 }}>
-                  <BtnPrimary style={{ fontSize: 11 }} onClick={() => onStartTest(t.id)}>Start Test</BtnPrimary>
-                </div>
-              </Card>
-            ))}
+                  <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                    {la ? (
+                      <>
+                        <BtnPrimary
+                          style={{ fontSize: 11 }}
+                          onClick={() => onReviewAttempt(t.id, la.id)}
+                        >
+                          Review Results
+                        </BtnPrimary>
+                        <BtnOutline
+                          style={{ fontSize: 11 }}
+                          onClick={() => onStartTest(t.id)}
+                        >
+                          Retake
+                        </BtnOutline>
+                      </>
+                    ) : (
+                      <BtnPrimary style={{ fontSize: 11 }} onClick={() => onStartTest(t.id)}>Start Test</BtnPrimary>
+                    )}
+                  </div>
+                </Card>
+              )
+            })}
           </div>
         )
       )}
@@ -1371,6 +1429,8 @@ function StudentDashboardInner() {
   )
 
   const onStartTest = (id: string) => router.push(`/student/tests/${id}`)
+  const onReviewAttempt = (testId: string, attemptId: string) =>
+    router.push(`/student/tests/${testId}?review=${attemptId}`)
   const onJoinSession = (id: string) => router.push(`/session/${id}`)
   const onViewSessionNotes = (id: string) => router.push(`/session/${id}/notes`)
   const openConversation = (partnerId: string) => {
@@ -1493,6 +1553,7 @@ function StudentDashboardInner() {
               sessions={sessions}
               conversations={conversations}
               onStartTest={onStartTest}
+              onReviewAttempt={onReviewAttempt}
               onJoinSession={onJoinSession}
             />
           )}
@@ -1509,6 +1570,7 @@ function StudentDashboardInner() {
               loading={testsLoading}
               sessions={sessions}
               onStartTest={onStartTest}
+              onReviewAttempt={onReviewAttempt}
               onJoinSession={onJoinSession}
               onViewSessionNotes={onViewSessionNotes}
             />

@@ -9,7 +9,7 @@ import {
   use,
 } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   AlertCircle,
@@ -347,6 +347,8 @@ export default function StudentTakeTestPage({
   const { id } = use(params)
   const { status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const reviewAttemptId = searchParams.get('review')
   const [raw, setRaw] = useState<RawTest | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -393,7 +395,7 @@ export default function StudentTakeTestPage({
             </Link>
           </div>
         ) : (
-          <TestApp raw={raw} />
+          <TestApp raw={raw} testId={id} reviewAttemptId={reviewAttemptId} />
         )}
       </div>
     </>
@@ -403,7 +405,15 @@ export default function StudentTakeTestPage({
 // ── Test runtime ──────────────────────────────────────────────────────
 type Phase = 'intro' | 'section-start' | 'test' | 'break' | 'done' | 'review'
 
-function TestApp({ raw }: { raw: RawTest }) {
+function TestApp({
+  raw,
+  testId,
+  reviewAttemptId,
+}: {
+  raw: RawTest
+  testId: string
+  reviewAttemptId: string | null
+}) {
   const adapted = useMemo(() => adaptTest(raw), [raw])
   const sections = adapted.sections
 
@@ -416,18 +426,96 @@ function TestApp({ raw }: { raw: RawTest }) {
   const [flagged, setFlagged] = useState<Record<string, Set<string>>>({})
   const [passageHtmls, setPassageHtmls] = useState<Record<string, string>>({})
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
-  const [phase, setPhase] = useState<Phase>('intro')
+  const [phase, setPhase] = useState<Phase>(reviewAttemptId ? 'done' : 'intro')
   const [reviewSectionId, setReviewSectionId] = useState<string | null>(null)
   const [showNav, setShowNav] = useState(false)
   const [showFormula, setShowFormula] = useState(false)
   const [elimMode, setElimMode] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const submittedRef = useRef(false)
 
   const section = sections[sectionIdx]
 
+  // When the URL says ?review=<id>, fetch the saved answers and seed the
+  // section-keyed answers map, then drop the user on the Done screen so
+  // they can pick a section to review. Skips entirely if no id.
+  useEffect(() => {
+    if (!reviewAttemptId) return
+    let cancelled = false
+    fetch(`/api/tests/${testId}/attempts/${reviewAttemptId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d?.attempt) return
+        const flat = d.attempt.answers as Record<string, string>
+        const byQuestion = new Map<string, string>(Object.entries(flat))
+        const seeded: Record<string, Record<string, string>> = {}
+        for (const sec of sections) {
+          const inSec: Record<string, string> = {}
+          for (const q of sec.questions) {
+            const v = byQuestion.get(q.id)
+            if (typeof v === 'string') inSec[q.id] = v
+          }
+          seeded[sec.id] = inSec
+        }
+        setAnswers(seeded)
+        // Don't re-POST when the user clicks Retake from a review session.
+        submittedRef.current = true
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [reviewAttemptId, testId, sections])
+
+  // Persist the submission as soon as the runner enters the Done phase from
+  // an actual test-taking flow. Guarded so retakes within the same session
+  // re-submit, and the review deep-link path doesn't write a 0% row.
+  const submitAttempt = useCallback(
+    async (allAnswers: Record<string, Record<string, string>>) => {
+      if (submittedRef.current) return
+      submittedRef.current = true
+      setSubmitting(true)
+      setSubmitError(null)
+      const flat: Record<string, string> = {}
+      for (const sec of sections) {
+        const inSec = allAnswers[sec.id] || {}
+        for (const q of sec.questions) {
+          const v = inSec[q.id]
+          if (typeof v === 'string' && v.trim() !== '') flat[q.id] = v
+        }
+      }
+      try {
+        const res = await fetch(`/api/tests/${testId}/attempts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers: flat }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error || 'Failed to submit')
+        }
+      } catch (err) {
+        // Allow another attempt-send if it failed (don't lock the runner out).
+        submittedRef.current = false
+        setSubmitError(err instanceof Error ? err.message : 'Failed to submit')
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [sections, testId],
+  )
+
   const handleSectionEnd = useCallback(() => {
-    if (sectionIdx < sections.length - 1) setPhase('break')
-    else setPhase('done')
-  }, [sectionIdx, sections.length])
+    if (sectionIdx < sections.length - 1) {
+      setPhase('break')
+      return
+    }
+    setPhase('done')
+    // Fire-and-forget — the Done screen reads state directly, but we want the
+    // tutor to see the row even if the student closes the tab right after.
+    submitAttempt(answers)
+  }, [sectionIdx, sections.length, submitAttempt, answers])
 
   // Tick each second while in the test phase.
   useEffect(() => {
@@ -501,6 +589,9 @@ function TestApp({ raw }: { raw: RawTest }) {
     setPassageHtmls({})
     setTimeLeft(null)
     setPhase('intro')
+    // Retake: a new run-through is a new attempt, so allow another POST.
+    submittedRef.current = false
+    setSubmitError(null)
   }
 
   if (phase === 'intro') {
@@ -543,11 +634,14 @@ function TestApp({ raw }: { raw: RawTest }) {
       <DoneScreen
         sections={sections}
         answers={answers}
+        submitting={submitting}
+        submitError={submitError}
         onReview={(sid) => {
           setReviewSectionId(sid)
           setPhase('review')
         }}
         onRetake={reset}
+        onRetrySubmit={() => submitAttempt(answers)}
       />
     )
   }
@@ -840,13 +934,19 @@ function BreakScreen({
 function DoneScreen({
   sections,
   answers,
+  submitting,
+  submitError,
   onReview,
   onRetake,
+  onRetrySubmit,
 }: {
   sections: AdaptedSection[]
   answers: Record<string, Record<string, string>>
+  submitting: boolean
+  submitError: string | null
   onReview: (sid: string) => void
   onRetake: () => void
+  onRetrySubmit: () => void
 }) {
   const total = sections.reduce((a, s) => a + s.questions.length, 0)
   const correct = sections.reduce(
@@ -890,6 +990,42 @@ function DoneScreen({
                 transition: 'width .8s var(--kt-ease-emph)',
               }}
             />
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              color: submitError
+                ? 'var(--kt-danger)'
+                : submitting
+                  ? 'var(--kt-fg-3)'
+                  : 'var(--kt-purple-600)',
+              fontWeight: 600,
+            }}
+          >
+            {submitting
+              ? 'Saving results…'
+              : submitError
+                ? (
+                  <>
+                    Couldn’t save: {submitError}{' '}
+                    <button
+                      onClick={onRetrySubmit}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        marginLeft: 4,
+                        color: 'var(--kt-purple-600)',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </>
+                )
+                : 'Saved · your tutor has been notified.'}
           </div>
         </div>
         <div className="kt-section-list">
