@@ -286,7 +286,10 @@ export function MobileMessages({
               const prev = idx > 0 ? messages[idx - 1] : null
               const next = idx < messages.length - 1 ? messages[idx + 1] : null
               const groupedPrev = isGroupedWithPrev(m, prev)
-              const groupedNext = isGroupedWithPrev(next as ApiMessage, m)
+              // Guard: next can be null for the last message in the thread.
+              // Passing it as the `curr` arg used to crash the page with
+              // "Cannot read properties of null (reading 'sender_id')".
+              const groupedNext = next ? isGroupedWithPrev(next, m) : false
               return (
                 <div
                   key={m.id}

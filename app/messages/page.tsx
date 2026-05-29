@@ -423,7 +423,11 @@ function MessagesContent() {
                               const prev = idx > 0 ? group.messages[idx - 1] : null
                               const next = idx < group.messages.length - 1 ? group.messages[idx + 1] : null
                               const groupedPrev = isGroupedWithPrev(msg, prev)
-                              const groupedNext = isGroupedWithPrev(next as Message, msg)
+                              // Guard: next can be null for the last message
+                              // in a group. Passing it as the `curr` arg used
+                              // to crash the page with "Cannot read properties
+                              // of null (reading 'sender_id')".
+                              const groupedNext = next ? isGroupedWithPrev(next, msg) : false
                               return (
                                 <div
                                   key={msg.id}
