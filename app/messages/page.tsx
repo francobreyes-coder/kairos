@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState, useRef, useCallback } from 'react'
 import { Header } from '@/components/landing/header'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 import {
   MessageSquare,
   Send,
@@ -27,6 +28,18 @@ interface Message {
   receiver_id: string
   content: string
   created_at: string
+  conversation_id?: string | null
+}
+
+// Messages from the same sender sent within this window render conjoined
+// (shared timestamp, tight spacing) the way iMessage/Messenger groups them.
+const GROUP_WINDOW_MS = 60_000
+
+function isGroupedWithPrev(curr: Message, prev: Message | null | undefined): boolean {
+  if (!prev) return false
+  if (prev.sender_id !== curr.sender_id) return false
+  const diff = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime()
+  return diff >= 0 && diff < GROUP_WINDOW_MS
 }
 
 function timeAgo(dateStr: string): string {
@@ -72,6 +85,7 @@ function MessagesContent() {
   const [activePartner, setActivePartner] = useState<{ id: string; name: string } | null>(
     initialWith && initialName ? { id: initialWith, name: initialName } : null
   )
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [loadingConvos, setLoadingConvos] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [sending, setSending] = useState(false)
@@ -98,18 +112,75 @@ function MessagesContent() {
 
   // Load messages when partner changes
   useEffect(() => {
-    if (!activePartner) return
+    if (!activePartner) {
+      setConversationId(null)
+      return
+    }
+    let cancelled = false
     setLoadingMessages(true)
     setError(null)
     fetch(`/api/messages?with=${activePartner.id}`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return
         setMessages(data.messages ?? [])
         if (data.myIds) setMyIds(data.myIds)
+        setConversationId(data.conversationId ?? null)
       })
-      .catch(() => setError('Failed to load messages'))
-      .finally(() => setLoadingMessages(false))
+      .catch(() => {
+        if (!cancelled) setError('Failed to load messages')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMessages(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activePartner?.id])
+
+  // Live updates: subscribe to inserts on this conversation. The sender already
+  // appends its own message via the POST response, so we de-dupe by id.
+  useEffect(() => {
+    if (!conversationId) return
+    const supabase = getBrowserSupabase()
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const incoming = payload.new as Message
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === incoming.id)) return prev
+            return [...prev, incoming]
+          })
+          // Bump the partner's conversation entry so it pops to the top.
+          setConversations((prev) => {
+            const mineSend = myIds.includes(incoming.sender_id)
+            const partnerId = activePartner?.id
+            if (!partnerId) return prev
+            const idx = prev.findIndex((c) => c.partner_id === partnerId)
+            if (idx === -1) return prev
+            const updated = {
+              ...prev[idx],
+              last_message: incoming.content,
+              last_message_at: incoming.created_at,
+              last_message_is_mine: mineSend,
+            }
+            return [updated, ...prev.filter((_, i) => i !== idx)]
+          })
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [conversationId, myIds, activePartner?.id])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -143,8 +214,12 @@ function MessagesContent() {
         throw new Error(data.error || 'Failed to send')
       }
 
-      const { message } = await res.json()
-      setMessages((prev) => [...prev, message])
+      const { message, conversationId: newConvId } = await res.json()
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev
+        return [...prev, message]
+      })
+      if (newConvId && newConvId !== conversationId) setConversationId(newConvId)
       setDraft('')
 
       // Update conversation list
@@ -324,24 +399,34 @@ function MessagesContent() {
                                 {formatMessageDate(group.messages[0].created_at)}
                               </span>
                             </div>
-                            {group.messages.map((msg) => {
+                            {group.messages.map((msg, idx) => {
                               const mine = isMine(msg.sender_id)
+                              const prev = idx > 0 ? group.messages[idx - 1] : null
+                              const next = idx < group.messages.length - 1 ? group.messages[idx + 1] : null
+                              const groupedPrev = isGroupedWithPrev(msg, prev)
+                              const groupedNext = isGroupedWithPrev(next as Message, msg)
                               return (
                                 <div
                                   key={msg.id}
-                                  className={`flex mb-1.5 ${mine ? 'justify-end' : 'justify-start'}`}
+                                  className={`flex ${groupedPrev ? 'mt-0.5' : 'mt-2'} ${mine ? 'justify-end' : 'justify-start'}`}
                                 >
                                   <div
                                     className={`max-w-[75%] px-3.5 py-2 rounded-2xl ${
                                       mine
-                                        ? 'bg-accent text-accent-foreground rounded-br-md'
-                                        : 'bg-muted text-foreground rounded-bl-md'
+                                        ? 'bg-accent text-accent-foreground'
+                                        : 'bg-muted text-foreground'
+                                    } ${
+                                      mine
+                                        ? groupedNext ? '' : 'rounded-br-md'
+                                        : groupedNext ? '' : 'rounded-bl-md'
                                     }`}
                                   >
                                     <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                                    <p className={`text-[10px] mt-1 ${mine ? 'text-accent-foreground/60' : 'text-muted-foreground'}`}>
-                                      {formatMessageTime(msg.created_at)}
-                                    </p>
+                                    {!groupedNext && (
+                                      <p className={`text-[10px] mt-1 ${mine ? 'text-accent-foreground/60' : 'text-muted-foreground'}`}>
+                                        {formatMessageTime(msg.created_at)}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                               )

@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Send, ArrowLeft, AlertCircle } from 'lucide-react'
 import { MOBILE_GRAD, MOBILE_SH1 } from './mobile-shell'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 
 interface ApiConversation {
   partner_id: string
@@ -19,6 +20,18 @@ interface ApiMessage {
   receiver_id: string
   content: string
   created_at: string
+  conversation_id?: string | null
+}
+
+// Messages from the same sender within this window render as a single
+// conjoined visual group (no avatar repeat, shared timestamp at the bottom).
+const GROUP_WINDOW_MS = 60_000
+
+function isGroupedWithPrev(curr: ApiMessage, prev: ApiMessage | null | undefined): boolean {
+  if (!prev) return false
+  if (prev.sender_id !== curr.sender_id) return false
+  const diff = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime()
+  return diff >= 0 && diff < GROUP_WINDOW_MS
 }
 
 const AVATAR_PALETTE = ['#6C52E0', '#7A62EA', '#9B86F0', '#B47AE8', '#8177C9', '#7A3AE8', '#BDB0F5', '#5B24CC']
@@ -72,6 +85,7 @@ export function MobileMessages({
   const [active, setActive] = useState<{ id: string; name: string } | null>(null)
   const [messages, setMessages] = useState<ApiMessage[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [loadingThread, setLoadingThread] = useState(false)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -102,6 +116,7 @@ export function MobileMessages({
   useEffect(() => {
     if (!active) {
       setMessages([])
+      setConversationId(null)
       return
     }
     let cancelled = false
@@ -113,6 +128,7 @@ export function MobileMessages({
         if (cancelled) return
         setMessages(d.messages ?? [])
         if (d.myIds) setMyIds(d.myIds)
+        setConversationId(d.conversationId ?? null)
       })
       .catch(() => {
         if (!cancelled) setError('Failed to load thread')
@@ -124,6 +140,48 @@ export function MobileMessages({
       cancelled = true
     }
   }, [active])
+
+  // Realtime: append inserts on this conversation as they arrive. De-dupe by
+  // id since the sender already appended via the POST response.
+  useEffect(() => {
+    if (!conversationId) return
+    const supabase = getBrowserSupabase()
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const incoming = payload.new as ApiMessage
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === incoming.id)) return prev
+            return [...prev, incoming]
+          })
+          setConversations((prev) => {
+            const partnerId = active?.id
+            if (!partnerId) return prev
+            const idx = prev.findIndex((c) => c.partner_id === partnerId)
+            if (idx === -1) return prev
+            const updated: ApiConversation = {
+              ...prev[idx],
+              last_message: incoming.content,
+              last_message_at: incoming.created_at,
+              last_message_is_mine: myIds.includes(incoming.sender_id),
+            }
+            return [updated, ...prev.filter((_, i) => i !== idx)]
+          })
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [conversationId, myIds, active?.id])
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
@@ -143,8 +201,14 @@ export function MobileMessages({
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || 'Failed to send')
       }
-      const { message } = await res.json()
-      if (message) setMessages((prev) => [...prev, message])
+      const { message, conversationId: newConvId } = await res.json()
+      if (message) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === message.id)) return prev
+          return [...prev, message]
+        })
+      }
+      if (newConvId && newConvId !== conversationId) setConversationId(newConvId)
       setDraft('')
       setConversations((prev) => {
         const next = prev.filter((c) => c.partner_id !== active.id)
@@ -186,7 +250,6 @@ export function MobileMessages({
             padding: 16,
             display: 'flex',
             flexDirection: 'column',
-            gap: 14,
           }}
         >
           {loadingThread ? (
@@ -198,8 +261,12 @@ export function MobileMessages({
               No messages yet. Say hello!
             </div>
           ) : (
-            messages.map((m) => {
+            messages.map((m, idx) => {
               const mine = isMine(m.sender_id)
+              const prev = idx > 0 ? messages[idx - 1] : null
+              const next = idx < messages.length - 1 ? messages[idx + 1] : null
+              const groupedPrev = isGroupedWithPrev(m, prev)
+              const groupedNext = isGroupedWithPrev(next as ApiMessage, m)
               return (
                 <div
                   key={m.id}
@@ -208,14 +275,19 @@ export function MobileMessages({
                     gap: 8,
                     alignItems: 'flex-end',
                     flexDirection: mine ? 'row-reverse' : 'row',
+                    marginTop: groupedPrev ? 2 : idx === 0 ? 0 : 14,
                   }}
                 >
-                  <Avatar
-                    initials={mine ? myInitials : initialsOf(active.name)}
-                    color={mine ? avatarColor(myFullName || 'me') : avatarColor(active.id)}
-                    src={mine ? myPhoto : null}
-                    size={26}
-                  />
+                  {groupedNext ? (
+                    <div style={{ width: 26, flexShrink: 0 }} />
+                  ) : (
+                    <Avatar
+                      initials={mine ? myInitials : initialsOf(active.name)}
+                      color={mine ? avatarColor(myFullName || 'me') : avatarColor(active.id)}
+                      src={mine ? myPhoto : null}
+                      size={26}
+                    />
+                  )}
                   <div style={{ maxWidth: '78%' }}>
                     <div
                       style={{
@@ -225,24 +297,26 @@ export function MobileMessages({
                         lineHeight: 1.45,
                         background: mine ? MOBILE_GRAD : '#F1EFE9',
                         color: mine ? 'white' : '#1C1B1F',
-                        borderBottomRightRadius: mine ? 4 : 16,
-                        borderBottomLeftRadius: mine ? 16 : 4,
+                        borderBottomRightRadius: mine && !groupedNext ? 4 : 16,
+                        borderBottomLeftRadius: !mine && !groupedNext ? 4 : 16,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                       }}
                     >
                       {m.content}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: '#8A8792',
-                        marginTop: 4,
-                        textAlign: mine ? 'right' : 'left',
-                      }}
-                    >
-                      {formatStamp(m.created_at)}
-                    </div>
+                    {!groupedNext && (
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: '#8A8792',
+                          marginTop: 4,
+                          textAlign: mine ? 'right' : 'left',
+                        }}
+                      >
+                        {formatStamp(m.created_at)}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
