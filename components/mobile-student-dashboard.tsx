@@ -15,6 +15,7 @@ import {
 } from './mobile-shell'
 import { MobileMessages } from './mobile-messages'
 import { MobileStudentProfile } from './mobile-student-profile'
+import { MessagesErrorBoundary } from './messages-error-boundary'
 
 // Mirror just enough of the dashboard's data shapes to render the screen.
 interface ApiSession {
@@ -204,12 +205,14 @@ export function MobileStudentDashboard({
       )}
 
       {activeTab === 'messages' && (
-        <MobileMessages
-          myFullName={fullName}
-          myPhoto={profilePhoto || null}
-          partnerLabel="Conversations"
-          initialPartnerId={pendingPartnerId}
-        />
+        <MessagesErrorBoundary label="messages tab">
+          <MobileMessages
+            myFullName={fullName}
+            myPhoto={profilePhoto || null}
+            partnerLabel="Conversations"
+            initialPartnerId={pendingPartnerId}
+          />
+        </MessagesErrorBoundary>
       )}
 
       {activeTab === 'profile' && (

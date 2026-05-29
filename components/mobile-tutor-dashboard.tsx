@@ -15,6 +15,7 @@ import {
 } from './mobile-shell'
 import { MobileMessages } from './mobile-messages'
 import { MobileTutorProfile } from './mobile-tutor-profile'
+import { MessagesErrorBoundary } from './messages-error-boundary'
 
 export type TutorPanelId = 'home' | 'sessions' | 'earnings' | 'analytics' | 'messages' | 'profile'
 
@@ -185,11 +186,13 @@ export function MobileTutorDashboard({
       )}
 
       {activeTab === 'messages' && (
-        <MobileMessages
-          myFullName={data.profile.name}
-          myPhoto={data.profile.profile_photo}
-          partnerLabel="Students"
-        />
+        <MessagesErrorBoundary label="messages tab">
+          <MobileMessages
+            myFullName={data.profile.name}
+            myPhoto={data.profile.profile_photo}
+            partnerLabel="Students"
+          />
+        </MessagesErrorBoundary>
       )}
 
       {activeTab === 'profile' && (

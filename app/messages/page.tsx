@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState, useRef, useCallback } from 'react'
 import { Header } from '@/components/landing/header'
 import { getBrowserSupabase } from '@/lib/supabase-browser'
+import { MessagesErrorBoundary } from '@/components/messages-error-boundary'
 import {
   MessageSquare,
   Send,
@@ -512,7 +513,9 @@ export default function MessagesPage() {
         </>
       }
     >
-      <MessagesContent />
+      <MessagesErrorBoundary label="messages page">
+        <MessagesContent />
+      </MessagesErrorBoundary>
     </Suspense>
   )
 }
