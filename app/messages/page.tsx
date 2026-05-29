@@ -92,6 +92,12 @@ function MessagesContent() {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // Refs so the realtime channel can read the latest myIds / partner without
+  // re-subscribing every time a fetch returns a fresh array reference.
+  const myIdsRef = useRef<string[]>([])
+  const partnerRef = useRef<{ id: string; name: string } | null>(null)
+  useEffect(() => { myIdsRef.current = myIds }, [myIds])
+  useEffect(() => { partnerRef.current = activePartner }, [activePartner])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth')
@@ -140,9 +146,17 @@ function MessagesContent() {
 
   // Live updates: subscribe to inserts on this conversation. The sender already
   // appends its own message via the POST response, so we de-dupe by id.
+  // Deps are intentionally just conversationId — myIds/activePartner are read
+  // through refs so a fresh fetch's array reference doesn't tear the channel
+  // down and re-subscribe mid-mount.
   useEffect(() => {
     if (!conversationId) return
-    const supabase = getBrowserSupabase()
+    let supabase
+    try {
+      supabase = getBrowserSupabase()
+    } catch {
+      return
+    }
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
@@ -161,8 +175,8 @@ function MessagesContent() {
           })
           // Bump the partner's conversation entry so it pops to the top.
           setConversations((prev) => {
-            const mineSend = myIds.includes(incoming.sender_id)
-            const partnerId = activePartner?.id
+            const mineSend = myIdsRef.current.includes(incoming.sender_id)
+            const partnerId = partnerRef.current?.id
             if (!partnerId) return prev
             const idx = prev.findIndex((c) => c.partner_id === partnerId)
             if (idx === -1) return prev
@@ -180,7 +194,7 @@ function MessagesContent() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [conversationId, myIds, activePartner?.id])
+  }, [conversationId])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -380,7 +394,11 @@ function MessagesContent() {
                     </div>
 
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                    {/* min-h-0 is required: without it, this flex-1 item keeps
+                        its default min-height:auto, expands past its parent,
+                        and overflow-y-auto becomes inert — so new messages
+                        render below the viewport with no scrollbar to reach. */}
+                    <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1">
                       {loadingMessages ? (
                         <div className="flex items-center justify-center py-12">
                           <Loader2 className="w-5 h-5 text-accent animate-spin" />

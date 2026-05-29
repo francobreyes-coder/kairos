@@ -12,6 +12,7 @@ import { useViewerTimezone } from '@/lib/use-viewer-timezone'
 import { TimezoneSelector } from '@/components/timezone-selector'
 import { useIsMobile } from '@/lib/use-is-mobile'
 import { MobileStudentDashboard } from '@/components/mobile-student-dashboard'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Design tokens (scoped to dashboard via :root override on the wrapper)
@@ -205,6 +206,7 @@ interface ApiMessage {
   receiver_id: string
   content: string
   created_at: string
+  conversation_id?: string | null
 }
 
 function shortTutorName(name: string | null): string {
@@ -719,6 +721,7 @@ function PanelMessages({
   )
   const [msgs, setMsgs] = useState<ApiMessage[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [loadingThread, setLoadingThread] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -738,6 +741,7 @@ function PanelMessages({
   useEffect(() => {
     if (!activeId) {
       setMsgs([])
+      setConversationId(null)
       return
     }
     let cancelled = false
@@ -748,6 +752,7 @@ function PanelMessages({
         if (cancelled) return
         setMsgs(data.messages ?? [])
         setMyIds(data.myIds ?? [])
+        setConversationId(data.conversationId ?? null)
       })
       .catch(() => {
         if (!cancelled) setMsgs([])
@@ -757,6 +762,37 @@ function PanelMessages({
       })
     return () => { cancelled = true }
   }, [activeId])
+
+  // Live updates for the open thread. Sender already appended via the POST
+  // response so we de-dupe by id. Deps are intentionally just conversationId:
+  // myIds/activeId are read through refs so a new fetch's array reference
+  // doesn't tear down and re-subscribe the channel mid-mount.
+  useEffect(() => {
+    if (!conversationId) return
+    const supabase = getBrowserSupabase()
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const incoming = payload.new as ApiMessage
+          setMsgs((prev) => {
+            if (prev.some((m) => m.id === incoming.id)) return prev
+            return [...prev, incoming]
+          })
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [conversationId])
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
@@ -773,8 +809,14 @@ function PanelMessages({
         body: JSON.stringify({ receiverId: activeId, content }),
       })
       if (!res.ok) return
-      const { message } = await res.json()
-      if (message) setMsgs((prev) => [...prev, message])
+      const { message, conversationId: newConvId } = await res.json()
+      if (message) {
+        setMsgs((prev) => {
+          if (prev.some((m) => m.id === message.id)) return prev
+          return [...prev, message]
+        })
+      }
+      if (newConvId && newConvId !== conversationId) setConversationId(newConvId)
     } catch {
       // best-effort
     }
@@ -819,7 +861,7 @@ function PanelMessages({
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{activePartner.partner_name}</div>
               </div>
             </div>
-            <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div ref={bodyRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {loadingThread ? (
                 <div style={{ textAlign: 'center', color: 'var(--mute)', fontSize: 13, paddingTop: 24 }}>Loading…</div>
               ) : msgs.length === 0 ? (

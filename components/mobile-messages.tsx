@@ -91,6 +91,14 @@ export function MobileMessages({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  // Refs so the realtime effect can read the latest myIds / active without
+  // re-subscribing every time a fetch returns a new array reference. Channel
+  // thrash on the iOS WKWebView is the suspected cause of the WebKit
+  // "this page couldn't load" page-process crash.
+  const myIdsRef = useRef<string[]>([])
+  const activeRef = useRef<{ id: string; name: string } | null>(null)
+  useEffect(() => { myIdsRef.current = myIds }, [myIds])
+  useEffect(() => { activeRef.current = active }, [active])
 
   const myInitials = initialsOf(myFullName || 'You')
 
@@ -142,10 +150,22 @@ export function MobileMessages({
   }, [active])
 
   // Realtime: append inserts on this conversation as they arrive. De-dupe by
-  // id since the sender already appended via the POST response.
+  // id since the sender already appended via the POST response. Deps are
+  // intentionally just conversationId — the channel must outlive any fetch-
+  // induced state changes; reading the latest myIds / active through refs
+  // keeps the subscription stable for the lifetime of the open thread.
   useEffect(() => {
     if (!conversationId) return
-    const supabase = getBrowserSupabase()
+    let supabase
+    try {
+      supabase = getBrowserSupabase()
+    } catch {
+      // Missing NEXT_PUBLIC_SUPABASE_* — render keeps working, live
+      // updates just don't arrive. We don't want a render-time throw to
+      // crash the page (the iOS WKWebView surfaces that as
+      // "this page couldn't load").
+      return
+    }
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
@@ -163,7 +183,7 @@ export function MobileMessages({
             return [...prev, incoming]
           })
           setConversations((prev) => {
-            const partnerId = active?.id
+            const partnerId = activeRef.current?.id
             if (!partnerId) return prev
             const idx = prev.findIndex((c) => c.partner_id === partnerId)
             if (idx === -1) return prev
@@ -171,7 +191,7 @@ export function MobileMessages({
               ...prev[idx],
               last_message: incoming.content,
               last_message_at: incoming.created_at,
-              last_message_is_mine: myIds.includes(incoming.sender_id),
+              last_message_is_mine: myIdsRef.current.includes(incoming.sender_id),
             }
             return [updated, ...prev.filter((_, i) => i !== idx)]
           })
@@ -181,7 +201,7 @@ export function MobileMessages({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [conversationId, myIds, active?.id])
+  }, [conversationId])
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight

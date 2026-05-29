@@ -39,6 +39,7 @@ import { useViewerTimezone } from '@/lib/use-viewer-timezone'
 import { TimezoneSelector } from '@/components/timezone-selector'
 import { useIsMobile } from '@/lib/use-is-mobile'
 import { MobileTutorDashboard } from '@/components/mobile-tutor-dashboard'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Types
@@ -134,6 +135,7 @@ interface Message {
   receiver_id: string
   content: string
   created_at: string
+  conversation_id?: string | null
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1009,6 +1011,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
   const [active, setActive] = useState<{ id: string; name: string } | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [loadingConvos, setLoadingConvos] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [draft, setDraft] = useState('')
@@ -1037,7 +1040,10 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
   }, [])
 
   useEffect(() => {
-    if (!active) return
+    if (!active) {
+      setConversationId(null)
+      return
+    }
     setLoadingMessages(true)
     setError(null)
     fetch(`/api/messages?with=${active.id}`)
@@ -1045,10 +1051,41 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
       .then((data) => {
         setMessages(data.messages ?? [])
         if (data.myIds) setMyIds(data.myIds)
+        setConversationId(data.conversationId ?? null)
       })
       .catch(() => setError('Failed to load messages'))
       .finally(() => setLoadingMessages(false))
   }, [active])
+
+  // Live updates for the open thread. We POST-and-append locally, so realtime
+  // events from this tab will be de-duped by id and only events from the
+  // other side actually mutate state.
+  useEffect(() => {
+    if (!conversationId) return
+    const supabase = getBrowserSupabase()
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const incoming = payload.new as Message
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === incoming.id)) return prev
+            return [...prev, incoming]
+          })
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [conversationId])
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
@@ -1075,8 +1112,12 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
         const data = await res.json()
         throw new Error(data.error || 'Failed to send')
       }
-      const { message } = await res.json()
-      setMessages((prev) => [...prev, message])
+      const { message, conversationId: newConvId } = await res.json()
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev
+        return [...prev, message]
+      })
+      if (newConvId && newConvId !== conversationId) setConversationId(newConvId)
       const sent = draft.trim()
       setDraft('')
       setConversations((prev) => {
@@ -1175,7 +1216,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
               </div>
             </div>
 
-            <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div ref={bodyRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {loadingMessages ? (
                 <div style={{ padding: 40, display: 'grid', placeItems: 'center' }}>
                   <Loader2 size={20} className="animate-spin" color="#7A3AE8" />
