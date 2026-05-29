@@ -1081,7 +1081,13 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
           })
         },
       )
-      .subscribe()
+      // Surface the subscribe status so a missing realtime publication
+      // (CHANNEL_ERROR) is visible in the console instead of silent.
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[tutor-dash messages] realtime channel', status, err)
+        }
+      })
     return () => {
       supabase.removeChannel(channel)
     }
@@ -1106,7 +1112,13 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverId: active.id, content: draft.trim() }),
+        // Reuse the resolved conversation when known; receiverId-only would
+        // re-run find-or-create on every send and can fork a new thread.
+        body: JSON.stringify({
+          conversationId: conversationId ?? undefined,
+          receiverId: active.id,
+          content: draft.trim(),
+        }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -1142,11 +1154,14 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
 
   const tutorInitials = initialsOf(session?.user?.name ?? '?')
 
+  // Outer was display:grid with implicit auto row, so the right column's
+  // `height: 100%` resolved against a content-sized row, not the container —
+  // the inner flex:1/overflow:auto body never engaged. Flex forces both
+  // columns to stretch to the container's fixed height.
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: '260px 1fr',
+        display: 'flex',
         background: 'white',
         borderRadius: 16,
         boxShadow: '0 1px 2px rgba(28,27,31,.04), 0 2px 6px rgba(28,27,31,.05)',
@@ -1155,7 +1170,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
       }}
     >
       {/* Sidebar */}
-      <div style={{ borderRight: '1px solid #E6E3E8', overflowY: 'auto' }}>
+      <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid #E6E3E8', overflowY: 'auto' }}>
         <div style={{ padding: '14px 16px 10px', fontSize: 13, fontWeight: 700, color: '#1C1B1F', borderBottom: '1px solid #E6E3E8' }}>
           Students
         </div>
@@ -1201,7 +1216,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
       </div>
 
       {/* Thread */}
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {!active ? (
           <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#8A8792', fontSize: 13 }}>
             Select a conversation to start messaging.

@@ -197,7 +197,13 @@ export function MobileMessages({
           })
         },
       )
-      .subscribe()
+      // Surface the subscribe status so a missing realtime publication
+      // (CHANNEL_ERROR) is visible in the console instead of silent.
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[mobile messages] realtime channel', status, err)
+        }
+      })
     return () => {
       supabase.removeChannel(channel)
     }
@@ -215,7 +221,13 @@ export function MobileMessages({
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverId: active.id, content: text }),
+        // Reuse the resolved conversation when known; receiverId-only would
+        // re-run find-or-create on every send and can fork a new thread.
+        body: JSON.stringify({
+          conversationId: conversationId ?? undefined,
+          receiverId: active.id,
+          content: text,
+        }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))

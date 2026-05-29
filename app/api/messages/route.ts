@@ -118,6 +118,16 @@ async function findOrCreateConversation(
     throw new Error(`Failed to add participants: ${pErr.message}`)
   }
 
+  // Race-safety: re-check after the insert. If another concurrent send
+  // already created a conversation for this user pair, fall back to the
+  // oldest one (findExistingConversation orders by created_at asc) so both
+  // clients converge on the same thread instead of forking.
+  const after = await findExistingConversation(supabase, myIds, partnerIds)
+  if (after && after !== conv.id) {
+    await supabase.from('conversations').delete().eq('id', conv.id)
+    return after
+  }
+
   return conv.id
 }
 

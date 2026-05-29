@@ -788,7 +788,13 @@ function PanelMessages({
           })
         },
       )
-      .subscribe()
+      // Surface the subscribe status so a missing realtime publication
+      // (CHANNEL_ERROR) is visible in the console instead of silent.
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[student-dash messages] realtime channel', status, err)
+        }
+      })
     return () => {
       supabase.removeChannel(channel)
     }
@@ -806,7 +812,13 @@ function PanelMessages({
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverId: activeId, content }),
+        // Reuse the resolved conversation when known; receiverId-only would
+        // re-run find-or-create on every send and can fork a new thread.
+        body: JSON.stringify({
+          conversationId: conversationId ?? undefined,
+          receiverId: activeId,
+          content,
+        }),
       })
       if (!res.ok) return
       const { message, conversationId: newConvId } = await res.json()
@@ -825,13 +837,17 @@ function PanelMessages({
   const activePartner = conversations.find((c) => c.partner_id === activeId)
   const myIdSet = new Set(myIds)
 
+  // The outer was display:grid with an implicit auto row, so the right
+  // column's `height: 100%` resolved against a content-sized row, not the
+  // container — the inner flex:1/overflow:auto body never engaged. Flex
+  // forces both columns to stretch to the container's fixed height.
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '260px 1fr',
+      display: 'flex',
       background: 'var(--s0)', borderRadius: 16, boxShadow: 'var(--sh1)',
       overflow: 'hidden', height: 'calc(100vh - 168px)',
     }}>
-      <div style={{ borderRight: '1px solid var(--hair)', overflowY: 'auto' }}>
+      <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--hair)', overflowY: 'auto' }}>
         <div style={{ padding: '14px 16px 10px', fontSize: 13, fontWeight: 700, color: 'var(--ink)', borderBottom: '1px solid var(--hair)' }}>Conversations</div>
         {conversations.length === 0 ? (
           <EmptyState title="No conversations" sub="Book a session to start chatting with a tutor." />
@@ -852,7 +868,7 @@ function PanelMessages({
           )
         })}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {activePartner ? (
           <>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12 }}>

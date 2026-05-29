@@ -191,7 +191,13 @@ function MessagesContent() {
           })
         },
       )
-      .subscribe()
+      // Surface the subscribe status so a missing realtime publication
+      // (CHANNEL_ERROR) is visible in the console instead of silent.
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[messages] realtime channel', status, err)
+        }
+      })
     return () => {
       supabase.removeChannel(channel)
     }
@@ -219,6 +225,10 @@ function MessagesContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Reuse the already-resolved conversation when we have one — sending
+          // by receiverId alone re-runs find-or-create on every message, which
+          // can race or split a thread into a duplicate conversation row.
+          conversationId: conversationId ?? undefined,
           receiverId: activePartner.id,
           content: draft.trim(),
         }),
