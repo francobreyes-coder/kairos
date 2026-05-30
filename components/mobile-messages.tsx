@@ -197,12 +197,8 @@ export function MobileMessages({
           })
         },
       )
-      // Surface the subscribe status so a missing realtime publication
-      // (CHANNEL_ERROR) is visible in the console instead of silent.
       .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.warn('[mobile messages] realtime channel', status, err)
-        }
+        console.info('[mobile messages] realtime', status, conversationId, err)
       })
     return () => {
       supabase.removeChannel(channel)

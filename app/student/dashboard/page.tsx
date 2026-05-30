@@ -788,12 +788,8 @@ function PanelMessages({
           })
         },
       )
-      // Surface the subscribe status so a missing realtime publication
-      // (CHANNEL_ERROR) is visible in the console instead of silent.
       .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.warn('[student-dash messages] realtime channel', status, err)
-        }
+        console.info('[student-dash messages] realtime', status, conversationId, err)
       })
     return () => {
       supabase.removeChannel(channel)
