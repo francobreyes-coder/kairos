@@ -186,9 +186,7 @@ function MessagesContent() {
           })
         },
       )
-      .subscribe((status, err) => {
-        console.info('[messages] realtime', status, conversationId, err)
-      })
+      .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }

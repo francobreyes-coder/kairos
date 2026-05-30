@@ -192,9 +192,7 @@ export function MobileMessages({
           })
         },
       )
-      .subscribe((status, err) => {
-        console.info('[mobile messages] realtime', status, conversationId, err)
-      })
+      .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }

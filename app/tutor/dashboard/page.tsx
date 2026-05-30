@@ -1076,9 +1076,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
           })
         },
       )
-      .subscribe((status, err) => {
-        console.info('[tutor-dash messages] realtime', status, conversationId, err)
-      })
+      .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }

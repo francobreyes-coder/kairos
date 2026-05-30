@@ -783,9 +783,7 @@ function PanelMessages({
           })
         },
       )
-      .subscribe((status, err) => {
-        console.info('[student-dash messages] realtime', status, conversationId, err)
-      })
+      .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }
