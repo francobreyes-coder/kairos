@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save, AlertCircle, PauseCircle, Ban, RotateCcw } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronLeft, Loader2, Clock, Filter, ExternalLink, FileText, Video, ImageIcon, Pencil, X, Save, AlertCircle, PauseCircle, Ban, RotateCcw, BookOpen } from 'lucide-react'
+import Link from 'next/link'
 
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
@@ -646,9 +647,18 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-4xl px-6 py-8">
-        <div className="flex items-center gap-3 mb-8">
-          <Image src="/logo.png" alt="Kairos" width={36} height={36} className="rounded-xl" />
-          <h1 className="text-2xl font-semibold text-foreground">Admin Dashboard</h1>
+        <div className="flex items-center justify-between gap-3 mb-8">
+          <div className="flex items-center gap-3">
+            <Image src="/logo.png" alt="Kairos" width={36} height={36} className="rounded-xl" />
+            <h1 className="text-2xl font-semibold text-foreground">Admin Dashboard</h1>
+          </div>
+          <Link
+            href="/admin/questions"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-card border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:border-purple-500/30 transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            Question bank
+          </Link>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-6">
