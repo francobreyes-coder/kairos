@@ -169,15 +169,10 @@ export function MobileMessages({
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
+        'broadcast',
+        { event: 'new_message' },
         (payload) => {
-          const incoming = payload.new as ApiMessage
+          const incoming = payload.payload as ApiMessage
           setMessages((prev) => {
             if (prev.some((m) => m.id === incoming.id)) return prev
             return [...prev, incoming]

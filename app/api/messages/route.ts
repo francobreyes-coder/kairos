@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
+import { broadcastNewMessage } from '@/lib/broadcast'
 
 type Supa = ReturnType<typeof getSupabase>
 
@@ -468,6 +469,11 @@ export async function POST(req: NextRequest) {
     .from('conversations')
     .update({ updated_at: new Date().toISOString() })
     .eq('id', resolvedConvId)
+
+  // Push the new row to anyone subscribed to this conversation's broadcast
+  // topic. Using broadcast (not postgres_changes) lets RLS on `messages` stay
+  // strict — only the server ever reads from the table.
+  await broadcastNewMessage(resolvedConvId, message)
 
   return NextResponse.json(
     { message, conversationId: resolvedConvId },

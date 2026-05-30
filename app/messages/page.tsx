@@ -161,15 +161,10 @@ function MessagesContent() {
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
+        'broadcast',
+        { event: 'new_message' },
         (payload) => {
-          const incoming = payload.new as Message
+          const incoming = payload.payload as Message
           setMessages((prev) => {
             if (prev.some((m) => m.id === incoming.id)) return prev
             return [...prev, incoming]
