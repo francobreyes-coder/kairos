@@ -5,11 +5,12 @@ import { getSupabase } from '@/lib/supabase'
 const ADMIN_EMAIL = 'francobreyes@gmail.com'
 
 // POST /api/admin/questions/rename
-// Body: { field: 'difficulty' | 'question_type' | 'subject',
+// Body: { field: 'difficulty' | 'question_type' | 'topic' | 'subject',
 //         from: string,
 //         to: string,
-//         exam_type?: string,   // scope (optional)
-//         subject?: string }    // scope (optional, only for question_type)
+//         exam_type?: string,    // scope (optional)
+//         subject?: string,      // scope (optional, ignored when field === 'subject')
+//         question_type?: string // scope (optional, only used for topic) }
 //
 // Bulk UPDATE that renames one category label to another. Returns the row
 // count that was changed so the UI can confirm. Scope filters are AND-ed.
@@ -25,8 +26,9 @@ export async function POST(req: NextRequest) {
   const to = (body.to ?? '').toString().trim()
   const examType = body.exam_type as string | undefined
   const subject = body.subject as string | undefined
+  const questionType = body.question_type as string | undefined
 
-  if (!['difficulty', 'question_type', 'subject'].includes(field)) {
+  if (!['difficulty', 'question_type', 'topic', 'subject'].includes(field)) {
     return NextResponse.json({ error: 'Invalid field' }, { status: 400 })
   }
   if (!from || !to) {
@@ -44,6 +46,7 @@ export async function POST(req: NextRequest) {
 
   if (examType) query = query.eq('exam_type', examType)
   if (subject && field !== 'subject') query = query.eq('subject', subject)
+  if (questionType && field === 'topic') query = query.eq('question_type', questionType)
 
   const { error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

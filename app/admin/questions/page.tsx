@@ -32,6 +32,7 @@ interface Question {
   exam_type: 'SAT' | 'ACT'
   subject: string
   question_type: string
+  topic: string | null
   difficulty: string
   question_text: string
   answer_choices: AnswerChoice[]
@@ -49,6 +50,7 @@ interface Categories {
   exam_types: string[]
   subjects: Record<string, string[]>
   question_types: Record<string, string[]>
+  topics: Record<string, string[]>
   difficulties: string[]
 }
 
@@ -63,6 +65,7 @@ export default function AdminQuestionsPage() {
   const [examType, setExamType] = useState<string>('')
   const [subject, setSubject] = useState<string>('')
   const [questionType, setQuestionType] = useState<string>('')
+  const [topic, setTopic] = useState<string>('')
   const [difficulty, setDifficulty] = useState<string>('')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -76,7 +79,7 @@ export default function AdminQuestionsPage() {
   const [draft, setDraft] = useState<Question | null>(null)
   const [saving, setSaving] = useState(false)
   const [renamingField, setRenamingField] =
-    useState<null | { field: 'difficulty' | 'question_type'; from: string }>(null)
+    useState<null | { field: 'difficulty' | 'question_type' | 'topic'; from: string }>(null)
 
   useEffect(() => {
     if (sessionStatus === 'loading') return
@@ -104,16 +107,27 @@ export default function AdminQuestionsPage() {
     return categories.question_types[`${examType}|${subject}`] ?? []
   }, [categories, examType, subject])
 
+  const topicsForExamSubjectType = useMemo(() => {
+    if (!categories || !examType || !subject || !questionType) return []
+    return categories.topics[`${examType}|${subject}|${questionType}`] ?? []
+  }, [categories, examType, subject, questionType])
+
   // Reset cascading filters when a parent changes.
   useEffect(() => {
     setSubject('')
     setQuestionType('')
+    setTopic('')
     setOffset(0)
   }, [examType])
   useEffect(() => {
     setQuestionType('')
+    setTopic('')
     setOffset(0)
   }, [subject])
+  useEffect(() => {
+    setTopic('')
+    setOffset(0)
+  }, [questionType])
 
   // Debounce search input.
   useEffect(() => {
@@ -127,7 +141,7 @@ export default function AdminQuestionsPage() {
   useEffect(() => {
     if (!isAdmin) return
     fetchQuestions()
-  }, [isAdmin, examType, subject, questionType, difficulty, search, offset])
+  }, [isAdmin, examType, subject, questionType, topic, difficulty, search, offset])
 
   async function fetchQuestions() {
     setLoading(true)
@@ -135,6 +149,7 @@ export default function AdminQuestionsPage() {
     if (examType) params.set('exam_type', examType)
     if (subject) params.set('subject', subject)
     if (questionType) params.set('question_type', questionType)
+    if (topic) params.set('topic', topic)
     if (difficulty) params.set('difficulty', difficulty)
     if (search) params.set('q', search)
     params.set('limit', String(PAGE_SIZE))
@@ -164,6 +179,7 @@ export default function AdminQuestionsPage() {
     const body: Record<string, unknown> = {
       subject: draft.subject,
       question_type: draft.question_type,
+      topic: draft.topic && draft.topic.trim() ? draft.topic.trim() : null,
       difficulty: draft.difficulty,
       question_text: draft.question_text,
       answer_choices: draft.answer_choices,
@@ -203,6 +219,11 @@ export default function AdminQuestionsPage() {
       if (examType) body.exam_type = examType
       if (subject) body.subject = subject
     }
+    if (renamingField.field === 'topic') {
+      if (examType) body.exam_type = examType
+      if (subject) body.subject = subject
+      if (questionType) body.question_type = questionType
+    }
     const res = await fetch('/api/admin/questions/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -217,6 +238,9 @@ export default function AdminQuestionsPage() {
       }
       if (renamingField.field === 'question_type' && questionType === renamingField.from) {
         setQuestionType(to.trim())
+      }
+      if (renamingField.field === 'topic' && topic === renamingField.from) {
+        setTopic(to.trim())
       }
       fetchQuestions()
     }
@@ -242,6 +266,11 @@ export default function AdminQuestionsPage() {
         difficulties={categories?.difficulties ?? []}
         questionTypes={
           (categories?.question_types[`${draft.exam_type}|${draft.subject}`] ?? [])
+        }
+        topics={
+          (categories?.topics[
+            `${draft.exam_type}|${draft.subject}|${draft.question_type}`
+          ] ?? [])
         }
         onRename={(field, from) => setRenamingField({ field, from })}
       />
@@ -273,7 +302,7 @@ export default function AdminQuestionsPage() {
               Filters
             </span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
             <SelectField
               label="Exam"
               value={examType}
@@ -288,7 +317,7 @@ export default function AdminQuestionsPage() {
               disabled={!examType}
             />
             <SelectField
-              label="Type"
+              label="Category"
               value={questionType}
               onChange={setQuestionType}
               options={typesForExamSubject}
@@ -296,6 +325,21 @@ export default function AdminQuestionsPage() {
               onRename={
                 questionType
                   ? () => setRenamingField({ field: 'question_type', from: questionType })
+                  : undefined
+              }
+            />
+            <SelectField
+              label="Subcategory"
+              value={topic}
+              onChange={setTopic}
+              options={topicsForExamSubjectType}
+              disabled={!questionType}
+              extraOptions={
+                questionType ? [{ value: '__none__', label: '(unassigned)' }] : undefined
+              }
+              onRename={
+                topic && topic !== '__none__'
+                  ? () => setRenamingField({ field: 'topic', from: topic })
                   : undefined
               }
             />
@@ -370,7 +414,13 @@ export default function AdminQuestionsPage() {
           scope={
             renamingField.field === 'question_type'
               ? { exam_type: examType || undefined, subject: subject || undefined }
-              : undefined
+              : renamingField.field === 'topic'
+                ? {
+                    exam_type: examType || undefined,
+                    subject: subject || undefined,
+                    question_type: questionType || undefined,
+                  }
+                : undefined
           }
           onCancel={() => setRenamingField(null)}
           onConfirm={performRename}
@@ -387,10 +437,11 @@ function QuestionRow({ question, onClick }: { question: Question; onClick: () =>
       onClick={onClick}
       className="w-full text-left rounded-xl bg-card border border-border p-4 hover:border-purple-500/30 transition-colors"
     >
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <Badge color="purple">{question.exam_type}</Badge>
         <Badge color="gray">{question.subject}</Badge>
         <Badge color="gray">{question.question_type}</Badge>
+        {question.topic && <Badge color="indigo">{question.topic}</Badge>}
         <Badge color={difficultyColor(question.difficulty)}>{question.difficulty}</Badge>
         {question.data_table && <Badge color="emerald">table</Badge>}
         {(question.figures ?? []).length > 0 && (
@@ -411,6 +462,7 @@ function QuestionDetail({
   onClose,
   difficulties,
   questionTypes,
+  topics,
   onRename,
 }: {
   original: Question
@@ -421,7 +473,8 @@ function QuestionDetail({
   onClose: () => void
   difficulties: string[]
   questionTypes: string[]
-  onRename: (field: 'difficulty' | 'question_type', from: string) => void
+  topics: string[]
+  onRename: (field: 'difficulty' | 'question_type' | 'topic', from: string) => void
 }) {
   const dirty = useMemo(() => JSON.stringify(original) !== JSON.stringify(draft), [original, draft])
 
@@ -493,14 +546,14 @@ function QuestionDetail({
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
             Categorization
           </h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <CategoryField
               label="Subject"
               value={draft.subject}
               onChange={(v) => update('subject', v)}
             />
             <CategoryField
-              label="Question type"
+              label="Category"
               value={draft.question_type}
               options={questionTypes}
               onChange={(v) => update('question_type', v)}
@@ -508,6 +561,15 @@ function QuestionDetail({
                 draft.question_type
                   ? () => onRename('question_type', draft.question_type)
                   : undefined
+              }
+            />
+            <CategoryField
+              label="Subcategory"
+              value={draft.topic ?? ''}
+              options={topics}
+              onChange={(v) => update('topic', v ? v : null)}
+              onRename={
+                draft.topic ? () => onRename('topic', draft.topic as string) : undefined
               }
             />
             <CategoryField
@@ -748,6 +810,7 @@ function SelectField({
   options,
   disabled,
   onRename,
+  extraOptions,
 }: {
   label: string
   value: string
@@ -755,6 +818,7 @@ function SelectField({
   options: string[]
   disabled?: boolean
   onRename?: () => void
+  extraOptions?: { value: string; label: string }[]
 }) {
   return (
     <div>
@@ -780,6 +844,11 @@ function SelectField({
         className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-40"
       >
         <option value="">All</option>
+        {extraOptions?.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -797,23 +866,24 @@ function RenameModal({
   onCancel,
   onConfirm,
 }: {
-  field: 'difficulty' | 'question_type'
+  field: 'difficulty' | 'question_type' | 'topic'
   from: string
-  scope?: { exam_type?: string; subject?: string }
+  scope?: { exam_type?: string; subject?: string; question_type?: string }
   onCancel: () => void
   onConfirm: (to: string) => void
 }) {
   const [to, setTo] = useState(from)
   const scopeText = scope
-    ? [scope.exam_type, scope.subject].filter(Boolean).join(' / ') || 'all questions'
+    ? [scope.exam_type, scope.subject, scope.question_type].filter(Boolean).join(' / ') ||
+      'all questions'
     : 'all questions'
+  const fieldLabel =
+    field === 'question_type' ? 'category' : field === 'topic' ? 'subcategory' : 'difficulty'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="w-full max-w-md rounded-2xl bg-card border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-1">
-          Rename {field === 'question_type' ? 'question type' : 'difficulty'}
-        </h2>
+        <h2 className="text-lg font-semibold text-foreground mb-1">Rename {fieldLabel}</h2>
         <p className="text-xs text-muted-foreground mb-4">
           Every question in <span className="font-medium">{scopeText}</span> with{' '}
           <code className="rounded bg-secondary px-1">{from}</code> will be updated to the new label.
@@ -853,6 +923,7 @@ function Badge({ children, color }: { children: React.ReactNode; color: string }
     amber: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
     red: 'bg-red-500/10 text-red-600 border-red-500/20',
     emerald: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
+    indigo: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
   }
   return (
     <span

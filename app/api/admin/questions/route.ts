@@ -10,13 +10,13 @@ async function requireAdmin() {
 }
 
 const ALL_FIELDS =
-  'id, exam_type, subject, question_type, difficulty, question_text, ' +
+  'id, exam_type, subject, question_type, topic, difficulty, question_text, ' +
   'answer_choices, correct_answer, explanation, tags, time_estimate, ' +
   'figures, data_table, passage_group, passage_ids, question_number, ' +
   'context_lines, created_at, updated_at'
 
 // GET /api/admin/questions
-// Query params: exam_type, subject, question_type, difficulty, q (text search),
+// Query params: exam_type, subject, question_type, topic, difficulty, q (text search),
 // limit (default 100), offset (default 0).
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin())) {
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
   const examType = params.get('exam_type')
   const subject = params.get('subject')
   const questionType = params.get('question_type')
+  const topic = params.get('topic')
   const difficulty = params.get('difficulty')
   const q = params.get('q')?.trim()
   const limit = Math.min(parseInt(params.get('limit') ?? '100', 10) || 100, 500)
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
   if (examType) query = query.eq('exam_type', examType)
   if (subject) query = query.eq('subject', subject)
   if (questionType) query = query.eq('question_type', questionType)
+  if (topic) {
+    if (topic === '__none__') query = query.is('topic', null)
+    else query = query.eq('topic', topic)
+  }
   if (difficulty) query = query.eq('difficulty', difficulty)
   if (q) query = query.ilike('question_text', `%${q}%`)
 

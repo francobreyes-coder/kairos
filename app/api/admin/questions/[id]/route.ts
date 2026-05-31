@@ -7,6 +7,7 @@ const ADMIN_EMAIL = 'francobreyes@gmail.com'
 const EDITABLE = [
   'subject',
   'question_type',
+  'topic',
   'difficulty',
   'question_text',
   'answer_choices',
