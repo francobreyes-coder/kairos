@@ -34,6 +34,8 @@ interface DashboardSession {
   student_name: string
   student_sub: string
   timezone: string | null
+  // Net the tutor receives from Stripe after the Kairos platform fee.
+  net_earnings: number
 }
 
 interface DashboardStats {
@@ -46,6 +48,10 @@ interface DashboardStats {
   totalSessions: number
   uniqueStudents: number
   repeatRate: number
+  grossAllTime: number
+  grossThisWeek: number
+  platformFeeAllTime: number
+  platformFeePct: number
 }
 
 interface TutorProfile {
@@ -321,7 +327,7 @@ function HomeBody({
             upcoming.slice(0, 3).map((s) => {
               const chip = whenChip(s, viewerTz)
               const canStart = isWithinSessionWindow(s.scheduled_date, s.time_slot, sessionSourceTz(s))
-              const earn = parseFloat(String(s.price)) || 0
+              const earn = s.net_earnings
               return (
                 <div
                   key={s.id}
@@ -527,7 +533,7 @@ function SessionsBody({
           ) : (
             past.slice(0, 8).map((s) => {
               const chip = whenChip(s, viewerTz)
-              const earn = parseFloat(String(s.price)) || 0
+              const earn = s.net_earnings
               return (
                 <div
                   key={s.id}
@@ -560,6 +566,7 @@ function SessionsBody({
 function EarningsBody({ data }: { data: DashboardData }) {
   const { stats, weekly } = data
   const weekTotal = weekly.reduce((a, d) => a + d.val, 0)
+  const feePctLabel = `${Math.round((stats.platformFeePct ?? 0.15) * 100)}%`
   return (
     <>
       <SectionContainer>
@@ -569,6 +576,30 @@ function EarningsBody({ data }: { data: DashboardData }) {
           <MiniStatCard label="Pending" value={formatCurrency(stats.pendingEarnings)} />
           <MiniStatCard label="Avg / session" value={formatCurrency(stats.earningsPerSession)} />
         </div>
+      </SectionContainer>
+
+      <SectionContainer>
+        <SectionHead title={`Net of ${feePctLabel} Kairos fee`} />
+        <Card padded>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '4px 0 12px' }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Gross volume</div>
+              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{formatCurrency(stats.grossAllTime ?? 0)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Kairos fee</div>
+              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2, color: '#B12727' }}>
+                −{formatCurrency(stats.platformFeeAllTime ?? 0)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Your take</div>
+              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2, color: '#2FA46A' }}>
+                {formatCurrency(stats.totalEarnings)}
+              </div>
+            </div>
+          </div>
+        </Card>
       </SectionContainer>
 
       <SectionContainer>

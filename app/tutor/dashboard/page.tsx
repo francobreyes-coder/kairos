@@ -62,6 +62,10 @@ interface DashboardSession {
   student_name: string
   student_sub: string
   timezone: string | null
+  // Net the tutor receives from Stripe after the Kairos platform fee.
+  // Already computed server-side from the session's stored
+  // stripe_application_fee_amount, so the UI doesn't have to re-derive it.
+  net_earnings: number
 }
 
 interface DashboardStats {
@@ -74,6 +78,10 @@ interface DashboardStats {
   totalSessions: number
   uniqueStudents: number
   repeatRate: number
+  grossAllTime: number
+  grossThisWeek: number
+  platformFeeAllTime: number
+  platformFeePct: number
 }
 
 interface TutorProfile {
@@ -547,7 +555,9 @@ function SessRow({
   // not the viewer's display tz — the live-window math is the same instant
   // regardless of where the tutor is currently sitting.
   const canJoin = !past && s.status === 'confirmed' && isWithinSessionWindow(s)
-  const priceLabel = (parseFloat(String(s.price)) || 0) > 0 ? `+$${Math.round(parseFloat(String(s.price)))}` : ''
+  // Show the tutor's net take (price − Kairos fee) — this is the value
+  // Stripe actually transfers to their connected account.
+  const priceLabel = s.net_earnings > 0 ? `+$${Math.round(s.net_earnings)}` : ''
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid #E6E3E8' }}>
@@ -843,8 +853,8 @@ function PanelSessions({
                 <Pill color="mute">Past</Pill>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                {(parseFloat(String(s.price)) || 0) > 0 && (
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#2FA46A' }}>+${Math.round(parseFloat(String(s.price)))}</span>
+                {s.net_earnings > 0 && (
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#2FA46A' }}>+${Math.round(s.net_earnings)}</span>
                 )}
               </div>
               <Link href={`/session/${s.id}/notes`} style={{ textDecoration: 'none' }}>
@@ -865,8 +875,12 @@ function PanelSessions({
 function PanelEarnings({ data }: { data: DashboardData }) {
   const { stats, weekly, monthly, past } = data
   const [tab, setTab] = useState<'weekly' | 'monthly'>('weekly')
-  const completedTxns = past.filter((s) => s.status === 'completed')
+  // Only completed sessions that actually went through Stripe show in the
+  // transaction list — admin-created rows with no payment record would be
+  // misleading here.
+  const completedTxns = past.filter((s) => s.status === 'completed' && s.payment_status === 'paid')
   const viewerTz = useViewerTimezone()
+  const feePctLabel = `${Math.round((stats.platformFeePct ?? 0.15) * 100)}%`
 
   return (
     <div>
@@ -891,6 +905,39 @@ function PanelEarnings({ data }: { data: DashboardData }) {
         ))}
       </div>
 
+      {/* Breakdown — makes it explicit that the headline numbers are net of
+          the Kairos commission, sourced directly from Stripe per-session
+          application_fee data. */}
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Gross volume (all time)
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{formatCurrency(stats.grossAllTime ?? 0)}</div>
+            <div style={{ fontSize: 11, color: '#8A8792', marginTop: 2 }}>Total paid by students</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Kairos fee ({feePctLabel})
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: '#B12727' }}>
+              −{formatCurrency(stats.platformFeeAllTime ?? 0)}
+            </div>
+            <div style={{ fontSize: 11, color: '#8A8792', marginTop: 2 }}>Application fee collected by Stripe</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Your take (all time)
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: '#2FA46A' }}>
+              {formatCurrency(stats.totalEarnings)}
+            </div>
+            <div style={{ fontSize: 11, color: '#8A8792', marginTop: 2 }}>Transferred to your Stripe account</div>
+          </div>
+        </div>
+      </Card>
+
       {/* Payouts setup — surfaces Stripe connect status from existing endpoint */}
       <div style={{ marginBottom: 24 }}>
         <PayoutsCard />
@@ -905,6 +952,9 @@ function PanelEarnings({ data }: { data: DashboardData }) {
         ]}
       />
       <Card style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, marginBottom: 10, letterSpacing: '0.02em' }}>
+          Net earnings · after {feePctLabel} Kairos fee
+        </div>
         <BarChart data={tab === 'weekly' ? weekly : monthly} height={160} />
       </Card>
 
@@ -915,18 +965,27 @@ function PanelEarnings({ data }: { data: DashboardData }) {
             No completed sessions yet — your earnings will appear here once sessions are marked complete.
           </div>
         ) : (
-          completedTxns.map((s) => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: '1px solid #E6E3E8' }}>
-              <Avatar initials={initialsOf(s.student_name)} color={avatarColor(s.student_id)} size={36} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{s.student_name}</div>
-                <div style={{ fontSize: 12, color: '#8A8792' }}>
-                  {formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
+          completedTxns.map((s) => {
+            const gross = parseFloat(String(s.price)) || 0
+            const fee = Math.max(0, gross - s.net_earnings)
+            return (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: '1px solid #E6E3E8' }}>
+                <Avatar initials={initialsOf(s.student_name)} color={avatarColor(s.student_id)} size={36} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{s.student_name}</div>
+                  <div style={{ fontSize: 12, color: '#8A8792' }}>
+                    {formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                  <Pill color="green">+${Math.round(s.net_earnings)}</Pill>
+                  <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 500 }}>
+                    ${Math.round(gross)} − ${Math.round(fee)} fee
+                  </div>
                 </div>
               </div>
-              <Pill color="green">+${Math.round(parseFloat(String(s.price)) || 0)}</Pill>
-            </div>
-          ))
+            )
+          })
         )}
       </Card>
     </div>

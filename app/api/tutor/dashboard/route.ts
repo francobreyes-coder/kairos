@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { getUserCandidateIds } from '@/lib/user-candidates'
 import { expandLegacyServiceIds, expandLegacyServicePrices, SERVICE_LABELS } from '@/lib/services'
+import { PLATFORM_FEE_PCT } from '@/lib/stripe'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -95,7 +96,7 @@ export async function GET() {
   const tutorIds = Array.from(new Set([...candidateIds, tutorUserId]))
   const { data: sessions, error } = await supabase
     .from('sessions')
-    .select('*')
+    .select('id, student_id, tutor_id, day_of_week, time_slot, scheduled_date, status, price, payment_status, notes, created_at, timezone, stripe_payment_intent_id, stripe_application_fee_amount')
     .in('tutor_id', tutorIds)
     .order('scheduled_date', { ascending: true })
 
@@ -139,10 +140,28 @@ export async function GET() {
 
   const today = new Date().toISOString().split('T')[0]
 
+  // Net earnings the tutor actually receives from Stripe per session: the
+  // listed price minus the Kairos application fee that was attached to the
+  // PaymentIntent at booking. Prefer the persisted Stripe fee (in cents) so
+  // the dashboard reflects the exact amount Stripe transferred; fall back to
+  // PLATFORM_FEE_PCT for legacy rows booked before the fee column existed.
+  // Rows that never went through Stripe (payment_status != 'paid', e.g.
+  // refunds or admin-created sessions) contribute $0 — only paid sessions
+  // count toward earnings.
+  function netUsd(s: { price: unknown; payment_status: string | null; stripe_application_fee_amount: number | null }): number {
+    if (s.payment_status !== 'paid') return 0
+    const gross = parseFloat(String(s.price)) || 0
+    if (gross <= 0) return 0
+    const feeCents =
+      s.stripe_application_fee_amount ?? Math.round(gross * 100 * PLATFORM_FEE_PCT)
+    return Math.max(0, gross - feeCents / 100)
+  }
+
   const enrichedSessions = (sessions ?? []).map((s) => ({
     ...s,
     student_name: nameMap.get(s.student_id) ?? 'Student',
     student_sub: subMap.get(s.student_id) ?? '',
+    net_earnings: netUsd(s),
   }))
 
   const upcoming = enrichedSessions.filter(
@@ -153,8 +172,9 @@ export async function GET() {
   )
   const completed = enrichedSessions.filter((s) => s.status === 'completed')
 
-  // Earnings calculations
-  const totalEarnings = completed.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
+  // Earnings — net of the 15% Kairos platform fee, sourced from each
+  // session's stored Stripe application_fee_amount.
+  const totalEarnings = completed.reduce((sum, s) => sum + s.net_earnings, 0)
   const earningsPerSession = completed.length > 0 ? totalEarnings / completed.length : 0
 
   // Earnings this week (current Sun→Sat window)
@@ -166,21 +186,33 @@ export async function GET() {
 
   const earningsThisWeek = completed
     .filter((s) => s.scheduled_date >= startOfWeekStr)
-    .reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
+    .reduce((sum, s) => sum + s.net_earnings, 0)
 
-  // Pending earnings — money tied up in confirmed-but-not-yet-completed sessions
-  const pendingEarnings = upcoming.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
+  // Pending earnings — net of fee for confirmed-and-paid sessions that
+  // haven't been completed yet.
+  const pendingEarnings = upcoming.reduce((sum, s) => sum + s.net_earnings, 0)
 
-  // Weekly buckets — Mon..Sun in the current week, $ from completed sessions
-  // Use scheduled_date so a session that hasn't been marked completed yet still
-  // shows in the right column once it transitions.
+  // Gross volume (what students paid) + total Kairos commission — useful for
+  // the "After 15% Kairos fee" breakdown line on the Earnings tab.
+  const grossThisWeek = completed
+    .filter((s) => s.scheduled_date >= startOfWeekStr)
+    .reduce((sum, s) => (s.payment_status === 'paid' ? sum + (parseFloat(String(s.price)) || 0) : sum), 0)
+  const grossAllTime = completed.reduce(
+    (sum, s) => (s.payment_status === 'paid' ? sum + (parseFloat(String(s.price)) || 0) : sum),
+    0,
+  )
+  const platformFeeAllTime = Math.max(0, grossAllTime - totalEarnings)
+
+  // Weekly buckets — Mon..Sun in the current week, net $ from paid completed
+  // sessions. Use scheduled_date so a session that hasn't been marked
+  // completed yet still shows in the right column once it transitions.
   const weekly = DAY_LABELS.map((label) => ({ label, val: 0 }))
   for (const s of completed) {
     if (s.scheduled_date < startOfWeekStr) continue
     const d = new Date(s.scheduled_date + 'T00:00:00')
     // JS getDay: 0=Sun..6=Sat. Map to 0=Mon..6=Sun.
     const idx = (d.getDay() + 6) % 7
-    weekly[idx].val += parseFloat(s.price) || 0
+    weekly[idx].val += s.net_earnings
   }
   for (const w of weekly) w.val = Math.round(w.val)
 
@@ -199,7 +231,7 @@ export async function GET() {
     const ym = s.scheduled_date.slice(0, 7)
     const idx = monthly.findIndex((m) => m.ym === ym)
     if (idx >= 0) {
-      monthly[idx].val += parseFloat(s.price) || 0
+      monthly[idx].val += s.net_earnings
       monthlySessions[idx].val += 1
     }
   }
@@ -279,6 +311,12 @@ export async function GET() {
       totalSessions: enrichedSessions.length,
       uniqueStudents: studentCounts.size,
       repeatRate,
+      // Gross + fee context so the UI can show a "you collected $X, Kairos
+      // kept $Y" breakdown alongside the net figures above.
+      grossAllTime,
+      grossThisWeek,
+      platformFeeAllTime,
+      platformFeePct: PLATFORM_FEE_PCT,
     },
     upcoming: upcoming.slice(0, 10),
     past: past.slice(0, 20),
