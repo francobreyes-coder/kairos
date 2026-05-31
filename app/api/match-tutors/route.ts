@@ -23,7 +23,7 @@ export async function GET() {
   // Fetch all completed tutor profiles
   const { data: tutors, error: tutorErr } = await supabase
     .from('tutor_profiles')
-    .select('user_id, bio, profile_photo, subjects, college, major, interests, teaching_style, services, service_prices, availability, profile_completed, sat_score, act_score')
+    .select('user_id, bio, profile_photo, subjects, college, major, interests, teaching_style, services, service_prices, availability, profile_completed, sat_score, act_score, qa')
     .eq('profile_completed', true)
 
   if (tutorErr) {
@@ -158,6 +158,7 @@ export async function GET() {
       servicePrices: raw.service_prices ?? {},
       satScore: (raw.sat_score as number | null | undefined) ?? null,
       actScore: (raw.act_score as number | null | undefined) ?? null,
+      qa: (raw.qa as Array<{ question: string; answer: string }> | null | undefined) ?? [],
       score: m.score,
       reasons: m.reasons,
     }

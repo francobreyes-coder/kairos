@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { X, Star, Heart, Clock, GraduationCap, BookOpen, DollarSign } from 'lucide-react'
+import { X, Star, Heart, Clock, GraduationCap, BookOpen, DollarSign, MessageCircle } from 'lucide-react'
 
 interface TutorProfileModalProps {
   tutor: {
@@ -18,6 +18,7 @@ interface TutorProfileModalProps {
     servicePrices: Record<string, number>
     satScore?: number | null
     actScore?: number | null
+    qa?: Array<{ question: string; answer: string }>
     score: number
     reasons: string[]
   }
@@ -207,6 +208,22 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
               <div className="modal-tags">
                 {tutor.interests.map((i) => (
                   <span key={i} className="modal-tag secondary">{i}</span>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {tutor.qa && tutor.qa.length > 0 && (
+            <section className="modal-section">
+              <h3 className="modal-section-title">
+                <MessageCircle className="w-[15px] h-[15px]" /> Get to Know Me
+              </h3>
+              <div className="modal-qa-list">
+                {tutor.qa.map((entry, i) => (
+                  <div key={i} className="modal-qa-item">
+                    <p className="modal-qa-question">{entry.question}</p>
+                    <p className="modal-qa-answer">{entry.answer}</p>
+                  </div>
                 ))}
               </div>
             </section>
@@ -435,6 +452,29 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
         .modal-no-price {
           color: #8A8792;
           font-size: 13px;
+        }
+        .modal-qa-list {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .modal-qa-item {
+          padding: 12px 14px;
+          background: #F7F5F0;
+          border-radius: 12px;
+        }
+        .modal-qa-question {
+          font-size: 13px;
+          font-weight: 700;
+          color: #1C1B1F;
+          margin: 0 0 4px;
+        }
+        .modal-qa-answer {
+          font-size: 14px;
+          color: #1C1B1F;
+          line-height: 1.55;
+          margin: 0;
+          white-space: pre-wrap;
         }
         .modal-footer {
           padding: 16px 28px 22px;

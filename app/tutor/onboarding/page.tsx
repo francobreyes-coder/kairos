@@ -18,6 +18,8 @@ import {
   X,
   Camera,
   Trash2,
+  MessageCircle,
+  Plus,
 } from 'lucide-react'
 import { PhotoCropModal } from '@/components/photo-crop-modal'
 import { getBrowserTimezone, shortTimezoneLabel } from '@/lib/timezone'
@@ -28,6 +30,7 @@ const STEPS = [
   { label: 'Interests', icon: Heart },
   { label: 'Services', icon: Briefcase },
   { label: 'Availability', icon: Calendar },
+  { label: 'Q&A', icon: MessageCircle },
   { label: 'Preview', icon: Eye },
 ]
 
@@ -79,6 +82,38 @@ const SERVICE_OPTIONS = [
   { id: 'activities', label: 'Activities List Building' },
 ]
 
+// Phrasing for the dynamic "How long have you been a … tutor?" suggestion,
+// keyed by service id. Falls back to the plain "tutor" wording.
+const SERVICE_TUTOR_NOUN: Record<string, string> = {
+  essays: 'essay writing tutor',
+  sat: 'SAT tutor',
+  act: 'ACT tutor',
+  activities: 'activities list coach',
+}
+
+interface QaEntry {
+  question: string
+  answer: string
+}
+
+const STATIC_SUGGESTED_QUESTIONS = [
+  'What other schools did you get into?',
+  "What's your favorite food?",
+  'What are your plans post-grad?',
+  'Do you offer a free consultation?',
+]
+
+function buildSuggestedQuestions(services: string[]): string[] {
+  const tenureQs = services
+    .map((s) => SERVICE_TUTOR_NOUN[s])
+    .filter(Boolean)
+    .map((noun) => `How long have you been a${/^[aeiou]/i.test(noun) ? 'n' : ''} ${noun}?`)
+  // If the tutor offers nothing tutoring-specific yet, still surface a generic
+  // tenure question so the suggestion list isn't empty.
+  if (tenureQs.length === 0) tenureQs.push('How long have you been a tutor?')
+  return [...tenureQs, ...STATIC_SUGGESTED_QUESTIONS]
+}
+
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const TIME_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -98,6 +133,7 @@ interface ProfileData {
   services: string[]
   satScore: string
   actScore: string
+  qa: QaEntry[]
 }
 
 const emptyProfile: ProfileData = {
@@ -112,6 +148,7 @@ const emptyProfile: ProfileData = {
   services: [],
   satScore: '',
   actScore: '',
+  qa: [],
 }
 
 function isValidSatScore(raw: string): boolean {
@@ -207,6 +244,7 @@ export default function OnboardingPage() {
           availability: existing?.availability || {},
           satScore: existing?.sat_score != null ? String(existing.sat_score) : '',
           actScore: existing?.act_score != null ? String(existing.act_score) : '',
+          qa: Array.isArray(existing?.qa) ? existing.qa : [],
         }))
         setLoading(false)
       })
@@ -291,13 +329,41 @@ export default function OnboardingPage() {
       profile.services.includes('act') && isValidActScore(profile.actScore)
         ? Number(profile.actScore)
         : null
+    // Drop empty/partial Q&A entries on save so the public profile never
+    // shows a question without an answer.
+    const qa = profile.qa
+      .map((e) => ({ question: e.question.trim(), answer: e.answer.trim() }))
+      .filter((e) => e.question && e.answer)
     return {
       ...profile,
       satScore,
       actScore,
+      qa,
       profileCompleted,
       timezone: getBrowserTimezone(),
     }
+  }
+
+  function addQa(question: string) {
+    setProfile((p) => ({ ...p, qa: [...p.qa, { question, answer: '' }] }))
+  }
+
+  function updateQaAnswer(idx: number, answer: string) {
+    setProfile((p) => ({
+      ...p,
+      qa: p.qa.map((e, i) => (i === idx ? { ...e, answer } : e)),
+    }))
+  }
+
+  function updateQaQuestion(idx: number, question: string) {
+    setProfile((p) => ({
+      ...p,
+      qa: p.qa.map((e, i) => (i === idx ? { ...e, question } : e)),
+    }))
+  }
+
+  function removeQa(idx: number) {
+    setProfile((p) => ({ ...p, qa: p.qa.filter((_, i) => i !== idx) }))
   }
 
   async function saveProgress() {
@@ -754,8 +820,20 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* Step 5: Preview */}
+            {/* Step 5: Get to know me Q&A (optional) */}
             {step === 5 && (
+              <QaStep
+                qa={profile.qa}
+                services={profile.services}
+                onAdd={addQa}
+                onAnswer={updateQaAnswer}
+                onQuestion={updateQaQuestion}
+                onRemove={removeQa}
+              />
+            )}
+
+            {/* Step 6: Preview */}
+            {step === 6 && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-xl font-semibold text-foreground mb-1">Profile Preview</h2>
@@ -853,6 +931,23 @@ export default function OnboardingPage() {
                       )}
                     </div>
                   </PreviewSection>
+
+                  {profile.qa.some((e) => e.question.trim() && e.answer.trim()) && (
+                    <PreviewSection title="Get to Know Me">
+                      <div className="space-y-3">
+                        {profile.qa
+                          .filter((e) => e.question.trim() && e.answer.trim())
+                          .map((entry, i) => (
+                            <div key={i}>
+                              <p className="text-sm font-medium text-foreground">{entry.question}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-0.5">
+                                {entry.answer}
+                              </p>
+                            </div>
+                          ))}
+                      </div>
+                    </PreviewSection>
+                  )}
                 </div>
               </div>
             )}
@@ -909,6 +1004,105 @@ function PreviewSection({ title, children }: { title: string; children: React.Re
     <div className="p-4 rounded-xl bg-secondary/50 border border-border">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{title}</h3>
       {children}
+    </div>
+  )
+}
+
+function QaStep({
+  qa,
+  services,
+  onAdd,
+  onAnswer,
+  onQuestion,
+  onRemove,
+}: {
+  qa: QaEntry[]
+  services: string[]
+  onAdd: (question: string) => void
+  onAnswer: (idx: number, value: string) => void
+  onQuestion: (idx: number, value: string) => void
+  onRemove: (idx: number) => void
+}) {
+  const suggested = buildSuggestedQuestions(services)
+  const used = new Set(qa.map((e) => e.question.trim()))
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-foreground mb-1">Get to Know Me <span className="text-sm font-normal text-muted-foreground">(optional)</span></h2>
+        <p className="text-sm text-muted-foreground">
+          A short Q&amp;A that students see on your profile. Add a few questions to help them get a feel for who you are — or skip this step entirely.
+        </p>
+      </div>
+
+      {qa.length > 0 && (
+        <div className="space-y-4">
+          {qa.map((entry, i) => (
+            <div key={i} className="rounded-xl border border-border p-4 bg-card space-y-3">
+              <div className="flex items-start gap-2">
+                <input
+                  type="text"
+                  value={entry.question}
+                  onChange={(e) => onQuestion(i, e.target.value)}
+                  placeholder="Your question"
+                  maxLength={200}
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="flex-shrink-0 w-11 h-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  aria-label="Remove question"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <textarea
+                value={entry.answer}
+                onChange={(e) => onAnswer(i, e.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder="Your answer"
+                className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition resize-none"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">Suggested questions</label>
+        <p className="text-xs text-muted-foreground mb-3">Tap to add. You can edit the question after.</p>
+        <div className="flex flex-wrap gap-2">
+          {suggested.map((q) => {
+            const already = used.has(q)
+            return (
+              <button
+                key={q}
+                type="button"
+                disabled={already}
+                onClick={() => onAdd(q)}
+                className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${
+                  already
+                    ? 'bg-secondary text-muted-foreground border-border cursor-not-allowed'
+                    : 'bg-card border-border text-foreground hover:border-accent/50'
+                }`}
+              >
+                {already ? <CheckCircle className="w-3 h-3 mr-1.5 inline" /> : <Plus className="w-3 h-3 mr-1.5 inline" />}
+                {q}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => onAdd('')}
+            className="px-3 py-1.5 rounded-full text-sm transition-colors border border-dashed border-accent/50 text-accent hover:bg-accent/5"
+          >
+            <Plus className="w-3 h-3 mr-1.5 inline" />
+            Write your own question
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

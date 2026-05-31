@@ -163,6 +163,19 @@ export async function POST(req: Request) {
   // doesn't offer that service. Accept null explicitly so deselecting clears.
   if (body.satScore !== undefined) profileData.sat_score = body.satScore
   if (body.actScore !== undefined) profileData.act_score = body.actScore
+  if (Array.isArray(body.qa)) {
+    profileData.qa = body.qa
+      .map((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') return null
+        const e = entry as { question?: unknown; answer?: unknown }
+        const q = typeof e.question === 'string' ? e.question.trim() : ''
+        const a = typeof e.answer === 'string' ? e.answer.trim() : ''
+        if (!q || !a) return null
+        return { question: q.slice(0, 200), answer: a.slice(0, 1000) }
+      })
+      .filter((e: unknown): e is { question: string; answer: string } => e !== null)
+      .slice(0, 20)
+  }
   // Tutor's source timezone: captured from the browser when they set
   // availability. Their slots ("1:00 PM") are interpreted as wall-clock in
   // this tz, then converted to whichever tz a viewer is in.

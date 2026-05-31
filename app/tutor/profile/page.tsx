@@ -17,6 +17,8 @@ import {
   User,
   Camera,
   Trash2,
+  MessageCircle,
+  Plus,
 } from 'lucide-react'
 import { PhotoCropModal } from '@/components/photo-crop-modal'
 import { getBrowserTimezone, shortTimezoneLabel } from '@/lib/timezone'
@@ -69,6 +71,36 @@ const SERVICE_OPTIONS = [
   { id: 'activities', label: 'Activities List Building' },
 ]
 
+// Service-specific phrasing for the "How long have you been a … tutor?"
+// suggested question. Mirrors the same map in the onboarding step.
+const SERVICE_TUTOR_NOUN: Record<string, string> = {
+  essays: 'essay writing tutor',
+  sat: 'SAT tutor',
+  act: 'ACT tutor',
+  activities: 'activities list coach',
+}
+
+interface QaEntry {
+  question: string
+  answer: string
+}
+
+const STATIC_SUGGESTED_QUESTIONS = [
+  'What other schools did you get into?',
+  "What's your favorite food?",
+  'What are your plans post-grad?',
+  'Do you offer a free consultation?',
+]
+
+function buildSuggestedQuestions(services: string[]): string[] {
+  const tenureQs = services
+    .map((s) => SERVICE_TUTOR_NOUN[s])
+    .filter(Boolean)
+    .map((noun) => `How long have you been a${/^[aeiou]/i.test(noun) ? 'n' : ''} ${noun}?`)
+  if (tenureQs.length === 0) tenureQs.push('How long have you been a tutor?')
+  return [...tenureQs, ...STATIC_SUGGESTED_QUESTIONS]
+}
+
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const TIME_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -87,12 +119,13 @@ interface ProfileData {
   availability: Record<string, string[]>
   services: string[]
   timezone: string
+  qa: QaEntry[]
 }
 
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
 
-type Section = 'photo' | 'name' | 'bio' | 'academic' | 'interests' | 'services' | 'availability' | null
+type Section = 'photo' | 'name' | 'bio' | 'academic' | 'interests' | 'services' | 'availability' | 'qa' | null
 
 export default function ProfileDashboard() {
   const { data: session, status } = useSession()
@@ -144,6 +177,7 @@ export default function ProfileDashboard() {
           availability: existing.availability ?? {},
           services: existing.services ?? [],
           timezone: existing.timezone ?? '',
+          qa: Array.isArray(existing.qa) ? existing.qa : [],
         }
         setProfile(loaded)
         setLoading(false)
@@ -165,9 +199,15 @@ export default function ProfileDashboard() {
   async function saveEdit() {
     if (!editDraft) return
     setSaving(true)
+    // Drop half-filled Q&A rows so the saved state mirrors what the server
+    // will accept (the API filters empties too — keep them in sync).
+    const cleanedQa = editDraft.qa
+      .map((e) => ({ question: e.question.trim(), answer: e.answer.trim() }))
+      .filter((e) => e.question && e.answer)
+    const cleaned: ProfileData = { ...editDraft, qa: cleanedQa }
     // When saving availability, also record the browser's IANA timezone so
     // the slot strings can be interpreted as wall-clock in that tz.
-    const payload: Record<string, unknown> = { ...editDraft, profileCompleted: true }
+    const payload: Record<string, unknown> = { ...cleaned, profileCompleted: true }
     if (editing === 'availability') {
       payload.timezone = getBrowserTimezone()
     }
@@ -176,7 +216,7 @@ export default function ProfileDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    setProfile(editDraft)
+    setProfile(cleaned)
     setEditing(null)
     setEditDraft(null)
     setSaving(false)
@@ -218,6 +258,21 @@ export default function ProfileDashboard() {
         [key]: d[key].includes(value) ? d[key].filter((v) => v !== value) : [...d[key], value],
       }
     })
+  }
+
+  function addQaEntry(question: string) {
+    setEditDraft((d) => d ? { ...d, qa: [...d.qa, { question, answer: '' }] } : d)
+  }
+
+  function updateQaEntry(idx: number, key: 'question' | 'answer', value: string) {
+    setEditDraft((d) => d ? {
+      ...d,
+      qa: d.qa.map((e, i) => i === idx ? { ...e, [key]: value } : e),
+    } : d)
+  }
+
+  function removeQaEntry(idx: number) {
+    setEditDraft((d) => d ? { ...d, qa: d.qa.filter((_, i) => i !== idx) } : d)
   }
 
   function toggleDraftAvailability(day: string, slot: string) {
@@ -731,6 +786,41 @@ export default function ProfileDashboard() {
               )}
             </DashboardCard>
 
+            {/* Get to Know Me Q&A — optional, free-form list */}
+            <DashboardCard
+              icon={MessageCircle}
+              title="Get to Know Me Q&A"
+              subtitle={profile.qa.length > 0 ? `${profile.qa.length} answer${profile.qa.length === 1 ? '' : 's'}` : 'optional'}
+              editing={editing === 'qa'}
+              onEdit={() => startEdit('qa')}
+              onCancel={cancelEdit}
+              onSave={saveEdit}
+              saving={saving}
+            >
+              {editing === 'qa' && editDraft ? (
+                <QaEditor
+                  qa={editDraft.qa}
+                  services={editDraft.services}
+                  onAdd={addQaEntry}
+                  onChange={updateQaEntry}
+                  onRemove={removeQaEntry}
+                />
+              ) : profile.qa.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">
+                  Add a short Q&amp;A so students can get a feel for who you are.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {profile.qa.map((entry, i) => (
+                    <div key={i}>
+                      <p className="text-sm font-medium text-foreground">{entry.question}</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-0.5">{entry.answer}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DashboardCard>
+
           </div>
         </div>
       </main>
@@ -794,6 +884,95 @@ function DashboardCard({
         )}
       </div>
       {children}
+    </div>
+  )
+}
+
+function QaEditor({
+  qa,
+  services,
+  onAdd,
+  onChange,
+  onRemove,
+}: {
+  qa: QaEntry[]
+  services: string[]
+  onAdd: (question: string) => void
+  onChange: (idx: number, key: 'question' | 'answer', value: string) => void
+  onRemove: (idx: number) => void
+}) {
+  const suggested = buildSuggestedQuestions(services)
+  const used = new Set(qa.map((e) => e.question.trim()))
+
+  return (
+    <div className="space-y-4">
+      {qa.length > 0 && (
+        <div className="space-y-3">
+          {qa.map((entry, i) => (
+            <div key={i} className="rounded-xl border border-border p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <input
+                  type="text"
+                  value={entry.question}
+                  onChange={(e) => onChange(i, 'question', e.target.value)}
+                  placeholder="Your question"
+                  maxLength={200}
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="flex-shrink-0 w-11 h-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  aria-label="Remove question"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <textarea
+                value={entry.answer}
+                onChange={(e) => onChange(i, 'answer', e.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder="Your answer"
+                className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition resize-none"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <p className="text-xs font-medium text-muted-foreground mb-2">Suggested — tap to add</p>
+        <div className="flex flex-wrap gap-2">
+          {suggested.map((q) => {
+            const already = used.has(q)
+            return (
+              <button
+                key={q}
+                type="button"
+                disabled={already}
+                onClick={() => onAdd(q)}
+                className={`px-3 py-1.5 rounded-full text-xs transition-colors border ${
+                  already
+                    ? 'bg-secondary text-muted-foreground border-border cursor-not-allowed'
+                    : 'bg-card border-border text-foreground hover:border-accent/50'
+                }`}
+              >
+                {already ? <CheckCircle className="w-3 h-3 mr-1 inline" /> : <Plus className="w-3 h-3 mr-1 inline" />}
+                {q}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => onAdd('')}
+            className="px-3 py-1.5 rounded-full text-xs transition-colors border border-dashed border-accent/50 text-accent hover:bg-accent/5"
+          >
+            <Plus className="w-3 h-3 mr-1 inline" />
+            Write your own question
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

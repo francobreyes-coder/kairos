@@ -35,6 +35,7 @@ interface TutorMatch {
   servicePrices: Record<string, number>
   satScore: number | null
   actScore: number | null
+  qa: Array<{ question: string; answer: string }>
   score: number
   reasons: string[]
 }
