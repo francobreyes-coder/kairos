@@ -72,15 +72,15 @@ interface DashboardStats {
   totalEarnings: number
   earningsPerSession: number
   earningsThisWeek: number
-  pendingEarnings: number
+  // Live Stripe balance for the tutor's connected account — what's
+  // withdrawable now and what's still settling.
+  stripeAvailable: number
+  stripePending: number
   upcomingCount: number
   completedCount: number
   totalSessions: number
   uniqueStudents: number
   repeatRate: number
-  grossAllTime: number
-  grossThisWeek: number
-  platformFeeAllTime: number
   platformFeePct: number
 }
 
@@ -880,7 +880,6 @@ function PanelEarnings({ data }: { data: DashboardData }) {
   // misleading here.
   const completedTxns = past.filter((s) => s.status === 'completed' && s.payment_status === 'paid')
   const viewerTz = useViewerTimezone()
-  const feePctLabel = `${Math.round((stats.platformFeePct ?? 0.15) * 100)}%`
 
   return (
     <div>
@@ -888,8 +887,8 @@ function PanelEarnings({ data }: { data: DashboardData }) {
         {[
           [formatCurrency(stats.totalEarnings), 'Total Earned', true],
           [formatCurrency(stats.earningsThisWeek), 'This Week', false],
-          [formatCurrency(stats.pendingEarnings), 'Pending', false],
-          [formatCurrency(stats.earningsPerSession), 'Avg / Session', false],
+          [formatCurrency(stats.stripeAvailable ?? 0), 'Available', false],
+          [formatCurrency(stats.stripePending ?? 0), 'Pending', false],
         ].map(([n, l, grad]) => (
           <Card
             key={l as string}
@@ -905,39 +904,6 @@ function PanelEarnings({ data }: { data: DashboardData }) {
         ))}
       </div>
 
-      {/* Breakdown — makes it explicit that the headline numbers are net of
-          the Kairos commission, sourced directly from Stripe per-session
-          application_fee data. */}
-      <Card style={{ marginBottom: 24 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Gross volume (all time)
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{formatCurrency(stats.grossAllTime ?? 0)}</div>
-            <div style={{ fontSize: 11, color: '#8A8792', marginTop: 2 }}>Total paid by students</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Kairos fee ({feePctLabel})
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: '#B12727' }}>
-              −{formatCurrency(stats.platformFeeAllTime ?? 0)}
-            </div>
-            <div style={{ fontSize: 11, color: '#8A8792', marginTop: 2 }}>Application fee collected by Stripe</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Your take (all time)
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: '#2FA46A' }}>
-              {formatCurrency(stats.totalEarnings)}
-            </div>
-            <div style={{ fontSize: 11, color: '#8A8792', marginTop: 2 }}>Transferred to your Stripe account</div>
-          </div>
-        </div>
-      </Card>
-
       {/* Payouts setup — surfaces Stripe connect status from existing endpoint */}
       <div style={{ marginBottom: 24 }}>
         <PayoutsCard />
@@ -952,9 +918,6 @@ function PanelEarnings({ data }: { data: DashboardData }) {
         ]}
       />
       <Card style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 11, color: '#8A8792', fontWeight: 600, marginBottom: 10, letterSpacing: '0.02em' }}>
-          Net earnings · after {feePctLabel} Kairos fee
-        </div>
         <BarChart data={tab === 'weekly' ? weekly : monthly} height={160} />
       </Card>
 
@@ -965,27 +928,18 @@ function PanelEarnings({ data }: { data: DashboardData }) {
             No completed sessions yet — your earnings will appear here once sessions are marked complete.
           </div>
         ) : (
-          completedTxns.map((s) => {
-            const gross = parseFloat(String(s.price)) || 0
-            const fee = Math.max(0, gross - s.net_earnings)
-            return (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: '1px solid #E6E3E8' }}>
-                <Avatar initials={initialsOf(s.student_name)} color={avatarColor(s.student_id)} size={36} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{s.student_name}</div>
-                  <div style={{ fontSize: 12, color: '#8A8792' }}>
-                    {formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                  <Pill color="green">+${Math.round(s.net_earnings)}</Pill>
-                  <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 500 }}>
-                    ${Math.round(gross)} − ${Math.round(fee)} fee
-                  </div>
+          completedTxns.map((s) => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: '1px solid #E6E3E8' }}>
+              <Avatar initials={initialsOf(s.student_name)} color={avatarColor(s.student_id)} size={36} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{s.student_name}</div>
+                <div style={{ fontSize: 12, color: '#8A8792' }}>
+                  {formatShortDate(s, viewerTz)} · {convertSlotToTimezone(s.scheduled_date, s.time_slot, sessionSourceTz(s), viewerTz)?.time ?? s.time_slot}
                 </div>
               </div>
-            )
-          })
+              <Pill color="green">+${Math.round(s.net_earnings)}</Pill>
+            </div>
+          ))
         )}
       </Card>
     </div>

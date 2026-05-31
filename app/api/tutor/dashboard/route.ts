@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { getSupabase } from '@/lib/supabase'
 import { getUserCandidateIds } from '@/lib/user-candidates'
 import { expandLegacyServiceIds, expandLegacyServicePrices, SERVICE_LABELS } from '@/lib/services'
-import { PLATFORM_FEE_PCT } from '@/lib/stripe'
+import { getStripe, PLATFORM_FEE_PCT } from '@/lib/stripe'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -51,7 +51,7 @@ export async function GET() {
   // (handles cases where user has multiple accounts, e.g. Google + credentials)
   let { data: profile } = await supabase
     .from('tutor_profiles')
-    .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, qa, profile_completed')
+    .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, qa, profile_completed, stripe_account_id')
     .eq('user_id', userId)
     .eq('profile_completed', true)
     .single()
@@ -70,7 +70,7 @@ export async function GET() {
     if (appByEmail) {
       const { data: profileByOriginal } = await supabase
         .from('tutor_profiles')
-        .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, qa, profile_completed')
+        .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, qa, profile_completed, stripe_account_id')
         .eq('user_id', appByEmail.user_id)
         .eq('profile_completed', true)
         .single()
@@ -171,11 +171,17 @@ export async function GET() {
     (s) => s.scheduled_date < today || s.status === 'completed'
   )
   const completed = enrichedSessions.filter((s) => s.status === 'completed')
+  // Every session Stripe actually charged for. This is the only thing that
+  // affects the tutor's Stripe balance — completion status is a calendar
+  // bookkeeping concept that doesn't change what's already been transferred.
+  const paid = enrichedSessions.filter((s) => s.payment_status === 'paid')
 
   // Earnings — net of the 15% Kairos platform fee, sourced from each
-  // session's stored Stripe application_fee_amount.
-  const totalEarnings = completed.reduce((sum, s) => sum + s.net_earnings, 0)
-  const earningsPerSession = completed.length > 0 ? totalEarnings / completed.length : 0
+  // session's stored Stripe application_fee_amount. Counted on `paid` (not
+  // `completed`) so a session that's been charged but not yet marked
+  // complete still shows the money that's already sitting in Stripe.
+  const totalEarnings = paid.reduce((sum, s) => sum + s.net_earnings, 0)
+  const earningsPerSession = paid.length > 0 ? totalEarnings / paid.length : 0
 
   // Earnings this week (current Sun→Sat window)
   const now = new Date()
@@ -184,30 +190,13 @@ export async function GET() {
   startOfWeek.setHours(0, 0, 0, 0)
   const startOfWeekStr = startOfWeek.toISOString().split('T')[0]
 
-  const earningsThisWeek = completed
+  const earningsThisWeek = paid
     .filter((s) => s.scheduled_date >= startOfWeekStr)
     .reduce((sum, s) => sum + s.net_earnings, 0)
 
-  // Pending earnings — net of fee for confirmed-and-paid sessions that
-  // haven't been completed yet.
-  const pendingEarnings = upcoming.reduce((sum, s) => sum + s.net_earnings, 0)
-
-  // Gross volume (what students paid) + total Kairos commission — useful for
-  // the "After 15% Kairos fee" breakdown line on the Earnings tab.
-  const grossThisWeek = completed
-    .filter((s) => s.scheduled_date >= startOfWeekStr)
-    .reduce((sum, s) => (s.payment_status === 'paid' ? sum + (parseFloat(String(s.price)) || 0) : sum), 0)
-  const grossAllTime = completed.reduce(
-    (sum, s) => (s.payment_status === 'paid' ? sum + (parseFloat(String(s.price)) || 0) : sum),
-    0,
-  )
-  const platformFeeAllTime = Math.max(0, grossAllTime - totalEarnings)
-
-  // Weekly buckets — Mon..Sun in the current week, net $ from paid completed
-  // sessions. Use scheduled_date so a session that hasn't been marked
-  // completed yet still shows in the right column once it transitions.
+  // Weekly buckets — Mon..Sun in the current week, net $ from paid sessions.
   const weekly = DAY_LABELS.map((label) => ({ label, val: 0 }))
-  for (const s of completed) {
+  for (const s of paid) {
     if (s.scheduled_date < startOfWeekStr) continue
     const d = new Date(s.scheduled_date + 'T00:00:00')
     // JS getDay: 0=Sun..6=Sat. Map to 0=Mon..6=Sun.
@@ -227,7 +216,7 @@ export async function GET() {
     })
   }
   const monthlySessions = monthly.map((m) => ({ label: m.label, val: 0 }))
-  for (const s of completed) {
+  for (const s of paid) {
     const ym = s.scheduled_date.slice(0, 7)
     const idx = monthly.findIndex((m) => m.ym === ym)
     if (idx >= 0) {
@@ -236,6 +225,27 @@ export async function GET() {
     }
   }
   for (const m of monthly) m.val = Math.round(m.val)
+
+  // Live Stripe balance for the connected account — canonical source for
+  // "Available" (ready to be paid out) and "Pending" (still in flight from
+  // recent charges). Falls back to 0 if the tutor hasn't connected Stripe
+  // yet or the API call fails.
+  let stripeAvailable = 0
+  let stripePending = 0
+  if (profile.stripe_account_id) {
+    try {
+      const stripe = getStripe()
+      const balance = await stripe.balance.retrieve(undefined, {
+        stripeAccount: profile.stripe_account_id as string,
+      })
+      const usdCentsSum = (entries: Array<{ amount: number; currency: string }>) =>
+        entries.filter((e) => e.currency === 'usd').reduce((s, e) => s + e.amount, 0)
+      stripeAvailable = usdCentsSum(balance.available) / 100
+      stripePending = usdCentsSum(balance.pending) / 100
+    } catch (e) {
+      console.error('Failed to fetch Stripe balance:', e)
+    }
+  }
 
   // Top students by completed session count (for Analytics "by student" chart)
   const studentCounts = new Map<string, { name: string; sub: string; count: number }>()
@@ -305,17 +315,15 @@ export async function GET() {
       totalEarnings,
       earningsPerSession,
       earningsThisWeek,
-      pendingEarnings,
+      // Live values from the connected Stripe account so what the dashboard
+      // shows matches what the tutor sees on Stripe.
+      stripeAvailable,
+      stripePending,
       upcomingCount: upcoming.length,
       completedCount: completed.length,
       totalSessions: enrichedSessions.length,
       uniqueStudents: studentCounts.size,
       repeatRate,
-      // Gross + fee context so the UI can show a "you collected $X, Kairos
-      // kept $Y" breakdown alongside the net figures above.
-      grossAllTime,
-      grossThisWeek,
-      platformFeeAllTime,
       platformFeePct: PLATFORM_FEE_PCT,
     },
     upcoming: upcoming.slice(0, 10),

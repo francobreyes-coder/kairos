@@ -42,15 +42,13 @@ interface DashboardStats {
   totalEarnings: number
   earningsPerSession: number
   earningsThisWeek: number
-  pendingEarnings: number
+  stripeAvailable: number
+  stripePending: number
   upcomingCount: number
   completedCount: number
   totalSessions: number
   uniqueStudents: number
   repeatRate: number
-  grossAllTime: number
-  grossThisWeek: number
-  platformFeeAllTime: number
   platformFeePct: number
 }
 
@@ -565,41 +563,15 @@ function SessionsBody({
 
 function EarningsBody({ data }: { data: DashboardData }) {
   const { stats, weekly } = data
-  const weekTotal = weekly.reduce((a, d) => a + d.val, 0)
-  const feePctLabel = `${Math.round((stats.platformFeePct ?? 0.15) * 100)}%`
   return (
     <>
       <SectionContainer>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <MiniStatCard label="Total earned" value={formatCurrency(stats.totalEarnings)} accent />
-          <MiniStatCard label="This week" value={formatCurrency(weekTotal)} />
-          <MiniStatCard label="Pending" value={formatCurrency(stats.pendingEarnings)} />
-          <MiniStatCard label="Avg / session" value={formatCurrency(stats.earningsPerSession)} />
+          <MiniStatCard label="This week" value={formatCurrency(stats.earningsThisWeek)} />
+          <MiniStatCard label="Available" value={formatCurrency(stats.stripeAvailable ?? 0)} />
+          <MiniStatCard label="Pending" value={formatCurrency(stats.stripePending ?? 0)} />
         </div>
-      </SectionContainer>
-
-      <SectionContainer>
-        <SectionHead title={`Net of ${feePctLabel} Kairos fee`} />
-        <Card padded>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '4px 0 12px' }}>
-            <div>
-              <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Gross volume</div>
-              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{formatCurrency(stats.grossAllTime ?? 0)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Kairos fee</div>
-              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2, color: '#B12727' }}>
-                −{formatCurrency(stats.platformFeeAllTime ?? 0)}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: '#8A8792', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Your take</div>
-              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2, color: '#2FA46A' }}>
-                {formatCurrency(stats.totalEarnings)}
-              </div>
-            </div>
-          </div>
-        </Card>
       </SectionContainer>
 
       <SectionContainer>
