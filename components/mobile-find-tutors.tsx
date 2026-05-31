@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Sparkles, Clock, Heart, Star } from 'lucide-react'
+import { Search, X, Sparkles, Clock, Heart, Star, ArrowLeft } from 'lucide-react'
 import {
   MobileShell,
   MobileAppBar,
@@ -140,6 +140,47 @@ export function MobileFindTutors({
   return (
     <MobileShell>
       <MobileAppBar />
+
+      {isTutorViewer && (
+        <div
+          style={{
+            margin: '8px 16px 0',
+            padding: '10px 12px',
+            borderRadius: 12,
+            background: '#F0EBFC',
+            border: '1px solid #E1D5F7',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            fontSize: 12,
+            color: '#3D2A8A',
+          }}
+        >
+          <span style={{ flex: 1, lineHeight: 1.3 }}>
+            <strong>Previewing as a tutor.</strong>
+          </span>
+          <button
+            onClick={() => router.push('/tutor/dashboard')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid #C4B5F0',
+              background: '#FFFFFF',
+              color: '#5B24CC',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <ArrowLeft size={12} /> Dashboard
+          </button>
+        </div>
+      )}
 
       <div style={{ padding: '8px 20px 4px' }}>
         <div

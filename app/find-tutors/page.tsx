@@ -13,6 +13,7 @@ import {
   Star,
   DollarSign,
   Sparkles,
+  ArrowLeft,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
 import TutorProfileModal from '@/components/tutor-profile-modal'
@@ -349,6 +350,44 @@ export default function FindTutorsPage() {
 
   return (
     <Shell>
+      {isTutorViewer && (
+        <div
+          style={{
+            background: '#F0EBFC',
+            borderBottom: '1px solid #E1D5F7',
+            padding: '10px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            fontSize: 13,
+            color: '#3D2A8A',
+          }}
+        >
+          <span>
+            <strong>Previewing as a tutor.</strong> This is how students see your public profile.
+          </span>
+          <button
+            onClick={() => router.push('/tutor/dashboard')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid #C4B5F0',
+              background: '#FFFFFF',
+              color: '#5B24CC',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <ArrowLeft size={14} /> Back to dashboard
+          </button>
+        </div>
+      )}
+
       {/* HERO BANNER */}
       <div className="feed-hero">
         <div className="feed-hero-k">k</div>
