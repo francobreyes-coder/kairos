@@ -27,6 +27,8 @@ import {
   LogOut,
   CheckCircle,
   XCircle,
+  MessageCircle as IcQa,
+  Trash2 as IcTrash,
 } from 'lucide-react'
 import { PayoutsCard } from '@/components/payouts-card'
 import { SERVICE_OPTIONS, SERVICE_LABELS } from '@/lib/services'
@@ -84,6 +86,7 @@ interface TutorProfile {
   availability: Record<string, string[]>
   services: string[]
   service_prices: Record<string, number>
+  qa: Array<{ question: string; answer: string }>
 }
 
 interface TopStudent {
@@ -157,6 +160,27 @@ const SERVICE_BANDS: Record<string, { min: number; max: number; icon: string }> 
   activities: { min: 0, max: 100, icon: '🎯' },
 }
 const RATE_HARD_MAX = 500
+
+const SERVICE_TUTOR_NOUN: Record<string, string> = {
+  essays: 'essay writing tutor',
+  sat: 'SAT tutor',
+  act: 'ACT tutor',
+  activities: 'activities list coach',
+}
+const STATIC_SUGGESTED_QUESTIONS = [
+  'What other schools did you get into?',
+  "What's your favorite food?",
+  'What are your plans post-grad?',
+  'Do you offer a free consultation?',
+]
+function buildSuggestedQuestions(services: string[]): string[] {
+  const tenureQs = services
+    .map((s) => SERVICE_TUTOR_NOUN[s])
+    .filter(Boolean)
+    .map((noun) => `How long have you been a${/^[aeiou]/i.test(noun) ? 'n' : ''} ${noun}?`)
+  if (tenureQs.length === 0) tenureQs.push('How long have you been a tutor?')
+  return [...tenureQs, ...STATIC_SUGGESTED_QUESTIONS]
+}
 
 // Stable, hash-based avatar color so the same student always renders the same shade.
 const AVATAR_PALETTE = ['#7A62EA', '#9B86F0', '#B47AE8', '#6C52E0', '#8177C9', '#E882CC', '#82AAEE']
@@ -1352,10 +1376,43 @@ function PanelProfile({
   const [avail, setAvail] = useState<Record<string, string[]>>(profile.availability || {})
   const [openPicker, setOpenPicker] = useState<string | null>(null)
   const [draftPrices, setDraftPrices] = useState<Record<string, number>>(profile.service_prices || {})
+  const [qa, setQa] = useState<Array<{ question: string; answer: string }>>(profile.qa ?? [])
+  const [editQa, setEditQa] = useState(false)
+  const [savingQa, setSavingQa] = useState(false)
 
   useEffect(() => { setBio(profile.bio || '') }, [profile.bio])
   useEffect(() => { setAvail(profile.availability || {}) }, [profile.availability])
   useEffect(() => { setDraftPrices(profile.service_prices || {}) }, [profile.service_prices])
+  useEffect(() => { if (!editQa) setQa(profile.qa ?? []) }, [profile.qa, editQa])
+
+  function addQa(question: string) {
+    setQa((prev) => [...prev, { question, answer: '' }])
+  }
+  function updateQaField(i: number, key: 'question' | 'answer', value: string) {
+    setQa((prev) => prev.map((e, idx) => (idx === i ? { ...e, [key]: value } : e)))
+  }
+  function removeQa(i: number) {
+    setQa((prev) => prev.filter((_, idx) => idx !== i))
+  }
+  async function saveQa() {
+    const cleaned = qa
+      .map((e) => ({ question: e.question.trim(), answer: e.answer.trim() }))
+      .filter((e) => e.question && e.answer)
+    setSavingQa(true)
+    try {
+      await onSaveProfile({ qa: cleaned })
+      setQa(cleaned)
+      setEditQa(false)
+    } finally {
+      setSavingQa(false)
+    }
+  }
+  function cancelQa() {
+    setQa(profile.qa ?? [])
+    setEditQa(false)
+  }
+  const suggestedQa = buildSuggestedQuestions(profile.services ?? [])
+  const usedQa = new Set(qa.map((e) => e.question.trim()))
 
   const activeServices = profile.services ?? []
   const expertiseLabels = activeServices.map((id) => SERVICE_LABELS[id] ?? id)
@@ -1698,6 +1755,219 @@ function PanelProfile({
               {savingPrices ? <Loader2 size={12} className="animate-spin" /> : null}
               Save Rates
             </BtnPrimary>
+          </div>
+        )}
+      </Card>
+
+      {/* Get to Know Me Q&A */}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <IcQa size={15} color="#7A62EA" />
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1C1B1F', letterSpacing: '-0.01em' }}>
+              Get to Know Me Q&amp;A
+            </div>
+            <span style={{ fontSize: 12, color: '#8A8792' }}>
+              · {qa.length > 0 ? `${qa.length} answer${qa.length === 1 ? '' : 's'}` : 'optional'}
+            </span>
+          </div>
+          {editQa ? (
+            <div style={{ display: 'inline-flex', gap: 8 }}>
+              <button
+                onClick={cancelQa}
+                disabled={savingQa}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#5A5862',
+                  background: 'none',
+                  border: 'none',
+                  cursor: savingQa ? 'wait' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveQa}
+                disabled={savingQa}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#7A62EA',
+                  background: 'none',
+                  border: 'none',
+                  cursor: savingQa ? 'wait' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {savingQa ? <Loader2 size={12} className="animate-spin" /> : null} Save
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditQa(true)}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#7A62EA',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <IcEdit size={12} /> Edit
+            </button>
+          )}
+        </div>
+        <p style={{ fontSize: 12, color: '#8A8792', marginTop: -8, marginBottom: 14, lineHeight: 1.5 }}>
+          Optional. Add a short Q&amp;A so students can get a feel for who you are. Shown on your public profile.
+        </p>
+
+        {editQa ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {qa.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {qa.map((entry, i) => (
+                  <div key={i} style={{ border: '1px solid #E6E3E8', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <input
+                        type="text"
+                        value={entry.question}
+                        onChange={(e) => updateQaField(i, 'question', e.target.value)}
+                        placeholder="Your question"
+                        maxLength={200}
+                        style={{
+                          flex: 1,
+                          height: 36,
+                          borderRadius: 8,
+                          border: '1.5px solid #E6E3E8',
+                          background: '#F7F5F0',
+                          padding: '0 12px',
+                          fontFamily: 'inherit',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: '#1C1B1F',
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeQa(i)}
+                        aria-label="Remove question"
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 8,
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#8A8792',
+                          cursor: 'pointer',
+                          display: 'grid',
+                          placeItems: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <IcTrash size={14} />
+                      </button>
+                    </div>
+                    <textarea
+                      value={entry.answer}
+                      onChange={(e) => updateQaField(i, 'answer', e.target.value)}
+                      rows={3}
+                      maxLength={1000}
+                      placeholder="Your answer"
+                      style={{
+                        width: '100%',
+                        borderRadius: 8,
+                        border: '1.5px solid #E6E3E8',
+                        background: '#F7F5F0',
+                        padding: '8px 12px',
+                        fontFamily: 'inherit',
+                        fontSize: 13,
+                        color: '#1C1B1F',
+                        outline: 'none',
+                        resize: 'vertical',
+                        lineHeight: 1.5,
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#8A8792', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>
+                Suggested — click to add
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {suggestedQa.map((q) => {
+                  const already = usedQa.has(q)
+                  return (
+                    <button
+                      key={q}
+                      type="button"
+                      disabled={already}
+                      onClick={() => addQa(q)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        border: '1.5px solid #E6E3E8',
+                        background: already ? '#F1EFE9' : 'white',
+                        color: already ? '#8A8792' : '#1C1B1F',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: already ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {already ? <CheckCircle size={11} /> : <IcPlus size={11} />}
+                      {q}
+                    </button>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => addQa('')}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 999,
+                    border: '1.5px dashed #BDB0F5',
+                    background: 'transparent',
+                    color: '#7A62EA',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <IcPlus size={11} /> Write your own question
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : qa.length === 0 ? (
+          <div style={{ padding: '12px 0', fontSize: 13, color: '#8A8792', fontStyle: 'italic' }}>
+            No questions added yet. Tap Edit to add a few.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {qa.map((entry, i) => (
+              <div key={i} style={{ padding: '10px 12px', background: '#F7F5F0', borderRadius: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F', marginBottom: 4 }}>{entry.question}</div>
+                <div style={{ fontSize: 13, color: '#5A5862', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{entry.answer}</div>
+              </div>
+            ))}
           </div>
         )}
       </Card>

@@ -58,6 +58,7 @@ interface TutorProfile {
   availability: Record<string, string[]>
   services: string[]
   service_prices: Record<string, number>
+  qa: Array<{ question: string; answer: string }>
 }
 
 interface TopStudent {

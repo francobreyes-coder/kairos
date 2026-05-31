@@ -135,6 +135,22 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
             </section>
           )}
 
+          {tutor.qa && tutor.qa.length > 0 && (
+            <section className="modal-section">
+              <h3 className="modal-section-title">
+                <MessageCircle className="w-[15px] h-[15px]" /> Get to Know Me
+              </h3>
+              <div className="modal-qa-list">
+                {tutor.qa.map((entry, i) => (
+                  <div key={i} className="modal-qa-item">
+                    <p className="modal-qa-question">{entry.question}</p>
+                    <p className="modal-qa-answer">{entry.answer}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {tutor.reasons && tutor.reasons.length > 0 && (
             <section className="modal-section">
               <h3 className="modal-section-title">Why this match</h3>
@@ -143,36 +159,6 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
                   <li key={i}>{r}</li>
                 ))}
               </ul>
-            </section>
-          )}
-
-          {tutor.services.length > 0 && (
-            <section className="modal-section">
-              <h3 className="modal-section-title">
-                <DollarSign className="w-[15px] h-[15px]" /> Services
-              </h3>
-              <div className="modal-service-list">
-                {tutor.services.map((s) => {
-                  const price = tutor.servicePrices?.[s]
-                  // Show the tutor's own SAT/ACT score next to the matching
-                  // service as a credential signal for browsing students.
-                  const credential =
-                    s === 'sat' && typeof tutor.satScore === 'number'
-                      ? `Scored ${tutor.satScore}`
-                      : s === 'act' && typeof tutor.actScore === 'number'
-                        ? `Scored ${tutor.actScore}`
-                        : null
-                  return (
-                    <div key={s} className="modal-service-row">
-                      <div className="modal-service-label">
-                        <span>{SERVICE_LABELS[s] ?? s}</span>
-                        {credential && <span className="modal-service-credential">{credential}</span>}
-                      </div>
-                      {price ? <strong>${price}/hr</strong> : <span className="modal-no-price">—</span>}
-                    </div>
-                  )
-                })}
-              </div>
             </section>
           )}
 
@@ -213,18 +199,32 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
             </section>
           )}
 
-          {tutor.qa && tutor.qa.length > 0 && (
+          {tutor.services.length > 0 && (
             <section className="modal-section">
               <h3 className="modal-section-title">
-                <MessageCircle className="w-[15px] h-[15px]" /> Get to Know Me
+                <DollarSign className="w-[15px] h-[15px]" /> Services
               </h3>
-              <div className="modal-qa-list">
-                {tutor.qa.map((entry, i) => (
-                  <div key={i} className="modal-qa-item">
-                    <p className="modal-qa-question">{entry.question}</p>
-                    <p className="modal-qa-answer">{entry.answer}</p>
-                  </div>
-                ))}
+              <div className="modal-service-list">
+                {tutor.services.map((s) => {
+                  const price = tutor.servicePrices?.[s]
+                  // Show the tutor's own SAT/ACT score next to the matching
+                  // service as a credential signal for browsing students.
+                  const credential =
+                    s === 'sat' && typeof tutor.satScore === 'number'
+                      ? `Scored ${tutor.satScore}`
+                      : s === 'act' && typeof tutor.actScore === 'number'
+                        ? `Scored ${tutor.actScore}`
+                        : null
+                  return (
+                    <div key={s} className="modal-service-row">
+                      <div className="modal-service-label">
+                        <span>{SERVICE_LABELS[s] ?? s}</span>
+                        {credential && <span className="modal-service-credential">{credential}</span>}
+                      </div>
+                      {price ? <strong>${price}/hr</strong> : <span className="modal-no-price">—</span>}
+                    </div>
+                  )
+                })}
               </div>
             </section>
           )}

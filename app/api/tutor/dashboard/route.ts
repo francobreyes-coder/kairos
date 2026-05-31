@@ -50,7 +50,7 @@ export async function GET() {
   // (handles cases where user has multiple accounts, e.g. Google + credentials)
   let { data: profile } = await supabase
     .from('tutor_profiles')
-    .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, profile_completed')
+    .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, qa, profile_completed')
     .eq('user_id', userId)
     .eq('profile_completed', true)
     .single()
@@ -69,7 +69,7 @@ export async function GET() {
     if (appByEmail) {
       const { data: profileByOriginal } = await supabase
         .from('tutor_profiles')
-        .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, profile_completed')
+        .select('user_id, bio, profile_photo, subjects, college, major, availability, services, service_prices, qa, profile_completed')
         .eq('user_id', appByEmail.user_id)
         .eq('profile_completed', true)
         .single()
@@ -263,6 +263,7 @@ export async function GET() {
       ...profile,
       services,
       service_prices: expandLegacyServicePrices(profile.service_prices as Record<string, number> | null),
+      qa: (profile.qa as Array<{ question: string; answer: string }> | null | undefined) ?? [],
       name: app?.name ?? session.user.name ?? 'Tutor',
       profile_photo: profile.profile_photo
         ? `/api/storage?path=${encodeURIComponent(profile.profile_photo)}`
