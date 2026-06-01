@@ -168,31 +168,94 @@ function ChipSelect({
   options,
   selected,
   onToggle,
+  onAdd,
+  addPlaceholder = 'Add your own…',
+  maxCustomLength = 30,
 }: {
   options: string[]
   selected: string[]
   onToggle: (val: string) => void
+  onAdd?: (val: string) => void
+  addPlaceholder?: string
+  maxCustomLength?: number
 }) {
+  const [draft, setDraft] = useState('')
+  // Anything selected that isn't in the suggested list is a custom tag the
+  // tutor added themselves — render it as an active chip after the suggestions
+  // so they can still un-toggle it the same way.
+  const baseSet = new Set(options.map((o) => o.toLowerCase()))
+  const customSelected = selected.filter((s) => !baseSet.has(s.toLowerCase()))
+
+  function commitDraft() {
+    const trimmed = draft.trim()
+    if (!trimmed || !onAdd) return
+    if (selected.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
+      setDraft('')
+      return
+    }
+    onAdd(trimmed.slice(0, maxCustomLength))
+    setDraft('')
+  }
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((opt) => {
-        const active = selected.includes(opt)
-        return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = selected.includes(opt)
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onToggle(opt)}
+              className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${
+                active
+                  ? 'bg-accent text-accent-foreground border-accent'
+                  : 'bg-card border-border text-foreground hover:border-accent/50'
+              }`}
+            >
+              {opt}
+              {active && <X className="w-3 h-3 ml-1.5 inline" />}
+            </button>
+          )
+        })}
+        {customSelected.map((opt) => (
           <button
-            key={opt}
+            key={`custom-${opt}`}
             type="button"
             onClick={() => onToggle(opt)}
-            className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${
-              active
-                ? 'bg-accent text-accent-foreground border-accent'
-                : 'bg-card border-border text-foreground hover:border-accent/50'
-            }`}
+            className="px-3 py-1.5 rounded-full text-sm transition-colors border bg-accent text-accent-foreground border-accent"
           >
             {opt}
-            {active && <X className="w-3 h-3 ml-1.5 inline" />}
+            <X className="w-3 h-3 ml-1.5 inline" />
           </button>
-        )
-      })}
+        ))}
+      </div>
+      {onAdd && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitDraft()
+              }
+            }}
+            placeholder={addPlaceholder}
+            maxLength={maxCustomLength}
+            className="flex-1 h-9 px-3 rounded-full bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition"
+          />
+          <button
+            type="button"
+            onClick={commitDraft}
+            disabled={!draft.trim()}
+            className="inline-flex items-center gap-1 px-3 h-9 rounded-full text-sm border border-border bg-card text-foreground hover:border-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -621,11 +684,13 @@ export default function OnboardingPage() {
                   <label className="block text-sm font-medium text-foreground mb-1.5">
                     Your interests <span className="text-accent">*</span>
                   </label>
-                  <p className="text-xs text-muted-foreground mb-3">Pick at least 3</p>
+                  <p className="text-xs text-muted-foreground mb-3">Pick at least 3 — or add your own</p>
                   <ChipSelect
                     options={INTEREST_OPTIONS}
                     selected={profile.interests}
                     onToggle={(v) => toggleArray('interests', v)}
+                    onAdd={(v) => toggleArray('interests', v)}
+                    addPlaceholder="Add a custom interest…"
                   />
                 </div>
 

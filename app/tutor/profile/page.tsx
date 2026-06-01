@@ -125,6 +125,89 @@ interface ProfileData {
 const inputCls =
   'w-full h-11 px-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm outline-none focus:ring-2 focus:ring-ring/30 transition'
 
+function InterestPicker({
+  options,
+  selected,
+  onToggle,
+  onAdd,
+}: {
+  options: string[]
+  selected: string[]
+  onToggle: (val: string) => void
+  onAdd: (val: string) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const baseSet = new Set(options.map((o) => o.toLowerCase()))
+  const customSelected = selected.filter((s) => !baseSet.has(s.toLowerCase()))
+
+  function commit() {
+    const trimmed = draft.trim()
+    if (!trimmed) return
+    onAdd(trimmed.slice(0, 30))
+    setDraft('')
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = selected.includes(opt)
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onToggle(opt)}
+              className={`px-3 py-1.5 rounded-full text-xs transition-colors border ${
+                active
+                  ? 'bg-accent text-accent-foreground border-accent'
+                  : 'bg-card border-border text-foreground hover:border-accent/50'
+              }`}
+            >
+              {opt}
+              {active && <X className="w-3 h-3 ml-1 inline" />}
+            </button>
+          )
+        })}
+        {customSelected.map((opt) => (
+          <button
+            key={`custom-${opt}`}
+            type="button"
+            onClick={() => onToggle(opt)}
+            className="px-3 py-1.5 rounded-full text-xs transition-colors border bg-accent text-accent-foreground border-accent"
+          >
+            {opt}
+            <X className="w-3 h-3 ml-1 inline" />
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commit()
+            }
+          }}
+          placeholder="Add a custom interest…"
+          maxLength={30}
+          className="flex-1 h-9 px-3 rounded-full bg-card border border-border text-foreground placeholder:text-muted-foreground text-xs outline-none focus:ring-2 focus:ring-ring/30 transition"
+        />
+        <button
+          type="button"
+          onClick={commit}
+          disabled={!draft.trim()}
+          className="inline-flex items-center gap-1 px-3 h-9 rounded-full text-xs border border-border bg-card text-foreground hover:border-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add
+        </button>
+      </div>
+    </div>
+  )
+}
+
 type Section = 'photo' | 'name' | 'bio' | 'academic' | 'interests' | 'services' | 'availability' | 'qa' | null
 
 export default function ProfileDashboard() {
@@ -600,26 +683,18 @@ export default function ProfileDashboard() {
                 <div className="space-y-5">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-2">Interests</label>
-                    <div className="flex flex-wrap gap-2">
-                      {INTEREST_OPTIONS.map((opt) => {
-                        const active = editDraft.interests.includes(opt)
-                        return (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => toggleDraftArray('interests', opt)}
-                            className={`px-3 py-1.5 rounded-full text-xs transition-colors border ${
-                              active
-                                ? 'bg-accent text-accent-foreground border-accent'
-                                : 'bg-card border-border text-foreground hover:border-accent/50'
-                            }`}
-                          >
-                            {opt}
-                            {active && <X className="w-3 h-3 ml-1 inline" />}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <InterestPicker
+                      options={INTEREST_OPTIONS}
+                      selected={editDraft.interests}
+                      onToggle={(v) => toggleDraftArray('interests', v)}
+                      onAdd={(v) => {
+                        setEditDraft((d) => {
+                          if (!d) return d
+                          if (d.interests.some((s) => s.toLowerCase() === v.toLowerCase())) return d
+                          return { ...d, interests: [...d.interests, v] }
+                        })
+                      }}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-2">Teaching Style</label>

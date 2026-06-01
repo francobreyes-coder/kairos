@@ -14,6 +14,7 @@ import {
   DollarSign,
   Sparkles,
   ArrowLeft,
+  Award,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
 import TutorProfileModal from '@/components/tutor-profile-modal'
@@ -567,6 +568,17 @@ export default function FindTutorsPage() {
 
                   {/* Meta */}
                   <div className="tcard-meta">
+                    {(tutor.satScore != null || tutor.actScore != null) && (
+                      <div className="tcard-meta-row">
+                        <Award className="tcard-meta-icon w-[14px] h-[14px]" />
+                        {[
+                          tutor.satScore != null ? `SAT ${tutor.satScore}` : null,
+                          tutor.actScore != null ? `ACT ${tutor.actScore}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                    )}
                     {tutor.teachingStyle && (
                       <div className="tcard-meta-row">
                         <Clock className="tcard-meta-icon w-[14px] h-[14px]" />

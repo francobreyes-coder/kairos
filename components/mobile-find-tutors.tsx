@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Sparkles, Clock, Heart, Star, ArrowLeft } from 'lucide-react'
+import { Search, X, Sparkles, Clock, Heart, Star, ArrowLeft, Award } from 'lucide-react'
 import {
   MobileShell,
   MobileAppBar,
@@ -583,7 +583,7 @@ function TutorCard({
         ))}
       </div>
 
-      {(tutor.teachingStyle || tutor.interests.length > 0) && (
+      {(tutor.teachingStyle || tutor.interests.length > 0 || tutor.satScore != null || tutor.actScore != null) && (
         <div
           style={{
             borderTop: `1px solid ${hairColor}`,
@@ -593,6 +593,17 @@ function TutorCard({
             gap: 4,
           }}
         >
+          {(tutor.satScore != null || tutor.actScore != null) && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: subColor }}>
+              <Award size={13} color={muteColor} style={{ flexShrink: 0 }} />
+              {[
+                tutor.satScore != null ? `SAT ${tutor.satScore}` : null,
+                tutor.actScore != null ? `ACT ${tutor.actScore}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          )}
           {tutor.teachingStyle && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: subColor }}>
               <Clock size={13} color={muteColor} style={{ flexShrink: 0 }} />
