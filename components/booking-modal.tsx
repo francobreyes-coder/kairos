@@ -42,7 +42,13 @@ interface BookingModalProps {
   servicePrices: Record<string, number>
   onClose: () => void
   onBooked: () => void
+  // 'consultation' books a free 30-min intro call instead of a paid session:
+  // service/price UI is hidden and we post to /api/consultations rather than
+  // /api/checkout. Defaults to 'paid' so existing callers don't change.
+  kind?: 'paid' | 'consultation'
 }
+
+const CONSULTATION_DURATION_MIN = 30
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -78,7 +84,8 @@ function formatWeekRange(monday: Date): string {
   return `${monday.toLocaleDateString('en-US', opts)} – ${sunday.toLocaleDateString('en-US', opts)}`
 }
 
-export default function BookingModal({ tutorId, tutorName, services, servicePrices, onClose, onBooked }: BookingModalProps) {
+export default function BookingModal({ tutorId, tutorName, services, servicePrices, onClose, onBooked, kind = 'paid' }: BookingModalProps) {
+  const isConsult = kind === 'consultation'
   const [weekOffset, setWeekOffset] = useState(0)
   const [slots, setSlots] = useState<Record<string, SlotInfo[]>>({})
   const [tutorTimezone, setTutorTimezone] = useState<string>(DEFAULT_TIMEZONE)
@@ -88,7 +95,7 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
   // the API for validation) and the display coordinates (shown in the UI).
   const [selected, setSelected] = useState<DisplaySlot | null>(null)
   const [selectedService, setSelectedService] = useState<string | null>(
-    services.length === 1 ? services[0] : null
+    isConsult ? null : services.length === 1 ? services[0] : null
   )
   const [notes, setNotes] = useState('')
   const [booking, setBooking] = useState(false)
@@ -96,7 +103,7 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
   const [error, setError] = useState<string | null>(null)
 
   const monday = getMonday(weekOffset)
-  const selectedPrice = selectedService ? servicePrices[selectedService] : null
+  const selectedPrice = isConsult ? 0 : selectedService ? servicePrices[selectedService] : null
 
   // Clear selected slot when viewer tz changes — its display coordinates
   // are now in a different tz and the user should re-pick deliberately.
@@ -156,30 +163,48 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
   })()
 
   async function handleBook() {
-    if (!selected || !selectedService || !selectedPrice) return
+    if (!selected) return
+    if (!isConsult && (!selectedService || !selectedPrice)) return
     setBooking(true)
     setError(null)
 
     try {
-      const res = await fetch('/api/checkout', {
+      const endpoint = isConsult ? '/api/consultations' : '/api/checkout'
+      const payload = isConsult
+        ? {
+            tutorId,
+            dayOfWeek: selected.source.dayOfWeek,
+            timeSlot: selected.source.time,
+            scheduledDate: selected.source.date,
+            notes,
+          }
+        : {
+            tutorId,
+            // Send the tutor-tz coordinates the server stored, not the
+            // viewer-tz display coordinates — the server validates against
+            // its own availability template, which is in tutor tz.
+            dayOfWeek: selected.source.dayOfWeek,
+            timeSlot: selected.source.time,
+            scheduledDate: selected.source.date,
+            notes,
+            service: selectedService,
+          }
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tutorId,
-          // Send the tutor-tz coordinates the server stored, not the
-          // viewer-tz display coordinates — the server validates against
-          // its own availability template, which is in tutor tz.
-          dayOfWeek: selected.source.dayOfWeek,
-          timeSlot: selected.source.time,
-          scheduledDate: selected.source.date,
-          notes,
-          service: selectedService,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error || 'Failed to start checkout')
+        throw new Error(data.error || (isConsult ? 'Failed to book consultation' : 'Failed to start checkout'))
+      }
+
+      if (isConsult) {
+        setSuccess(true)
+        // Brief success state, then close so the parent can refresh.
+        setTimeout(() => onBooked(), 1500)
+        return
       }
 
       const { url } = await res.json()
@@ -195,7 +220,9 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
   }
 
   const hasAnySlots = displayGroups.some((g) => g.slots.length > 0)
-  const canBook = selected && selectedService && selectedPrice && selectedPrice > 0
+  const canBook = isConsult
+    ? !!selected
+    : !!(selected && selectedService && selectedPrice && selectedPrice > 0)
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -207,7 +234,9 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
         {/* Header */}
         <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Book a Session</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {isConsult ? 'Free 30-min Consultation' : 'Book a Session'}
+            </h2>
             <p className="text-sm text-muted-foreground">with {tutorName}</p>
           </div>
           <button
@@ -224,15 +253,25 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
               <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
                 <Check className="w-7 h-7 text-green-600" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Redirecting to payment...</h3>
+              <h3 className="text-lg font-semibold text-foreground">
+                {isConsult ? 'Consultation booked!' : 'Redirecting to payment...'}
+              </h3>
               <p className="text-sm text-muted-foreground text-center">
-                You&apos;ll be redirected to Stripe to complete your booking.
+                {isConsult
+                  ? `You'll meet ${tutorName} for ${CONSULTATION_DURATION_MIN} minutes. Check your email for details.`
+                  : "You'll be redirected to Stripe to complete your booking."}
               </p>
             </div>
           ) : (
             <>
+              {isConsult && (
+                <div className="mb-5 p-3 rounded-xl bg-accent/5 border border-accent/10 text-sm text-foreground">
+                  A free {CONSULTATION_DURATION_MIN}-minute intro call. Pick any slot from {tutorName}&apos;s
+                  availability — one consultation per tutor.
+                </div>
+              )}
               {/* Step 1: Service selection */}
-              {services.length > 1 && (
+              {!isConsult && services.length > 1 && (
                 <div className="mb-5">
                   <label className="text-sm font-medium text-foreground mb-2 block">
                     Select a service
@@ -268,7 +307,7 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
               )}
 
               {/* Single service — show price banner */}
-              {services.length === 1 && selectedPrice && selectedPrice > 0 && (
+              {!isConsult && services.length === 1 && selectedPrice && selectedPrice > 0 && (
                 <div className="mb-5 flex items-center gap-2 px-4 py-3 rounded-xl bg-green-50 border border-green-200">
                   <DollarSign className="w-4 h-4 text-green-600" />
                   <span className="text-sm font-medium text-green-700">
@@ -374,10 +413,16 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
                   {canBook && (
                     <div className="mb-4 p-3 rounded-xl bg-accent/5 border border-accent/10 flex items-center justify-between">
                       <div className="text-sm text-foreground">
-                        <span className="font-medium">{SERVICE_LABELS[selectedService!] ?? selectedService}</span>
+                        <span className="font-medium">
+                          {isConsult
+                            ? `Free ${CONSULTATION_DURATION_MIN}-min consult`
+                            : SERVICE_LABELS[selectedService!] ?? selectedService}
+                        </span>
                         {' '}· {selected!.display.dayOfWeek}, {formatDate(selected!.display.date)} at {selected!.display.time}
                       </div>
-                      <div className="text-lg font-bold text-accent">${selectedPrice}</div>
+                      <div className="text-lg font-bold text-accent">
+                        {isConsult ? 'Free' : `$${selectedPrice}`}
+                      </div>
                     </div>
                   )}
 
@@ -396,14 +441,21 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
                     {booking ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Redirecting to checkout...
+                        {isConsult ? 'Booking…' : 'Redirecting to checkout...'}
                       </>
                     ) : canBook ? (
-                      <>
-                        <CreditCard className="w-4 h-4" />
-                        Pay ${selectedPrice} & Book
-                      </>
-                    ) : !selectedService ? (
+                      isConsult ? (
+                        <>
+                          <Calendar className="w-4 h-4" />
+                          Book free consultation
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-4 h-4" />
+                          Pay ${selectedPrice} & Book
+                        </>
+                      )
+                    ) : !isConsult && !selectedService ? (
                       'Select a service'
                     ) : (
                       'Select a time slot'
@@ -411,7 +463,9 @@ export default function BookingModal({ tutorId, tutorName, services, servicePric
                   </button>
 
                   <p className="text-xs text-muted-foreground text-center mt-3">
-                    You&apos;ll be redirected to Stripe for secure payment
+                    {isConsult
+                      ? 'No card needed — just pick a time.'
+                      : "You'll be redirected to Stripe for secure payment"}
                   </p>
                 </>
               )}

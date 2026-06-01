@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Sparkles, Clock, Heart, Star, ArrowLeft, Award } from 'lucide-react'
+import { Search, X, Sparkles, Clock, Heart, Star, ArrowLeft, Award, MessageCircle, Gift } from 'lucide-react'
 import {
   MobileShell,
   MobileAppBar,
@@ -27,6 +27,8 @@ interface TutorMatch {
   satScore: number | null
   actScore: number | null
   qa: Array<{ question: string; answer: string }>
+  offersFreeConsultation: boolean
+  consultationDurationMinutes: number
   score: number
   reasons: string[]
 }
@@ -95,6 +97,8 @@ interface Props {
   isTutorViewer: boolean
   onOpenProfile: (t: TutorMatch) => void
   onBook: (t: TutorMatch) => void
+  onBookConsult?: (t: TutorMatch) => void
+  onMessage?: (t: TutorMatch) => void
   onClearFilters: () => void
   // Active role for the bottom nav. Students get the normal student-style nav.
   // Tutor viewers don't have a "Tutors" entry pinned; we still render the same
@@ -117,6 +121,8 @@ export function MobileFindTutors({
   isTutorViewer,
   onOpenProfile,
   onBook,
+  onBookConsult,
+  onMessage,
   onClearFilters,
 }: Props) {
   const router = useRouter()
@@ -375,6 +381,12 @@ export function MobileFindTutors({
                 subjectTags={subjectTags}
                 onClick={() => onOpenProfile(tutor)}
                 onBook={() => onBook(tutor)}
+                onMessage={onMessage ? () => onMessage(tutor) : undefined}
+                onBookConsult={
+                  onBookConsult && tutor.offersFreeConsultation
+                    ? () => onBookConsult(tutor)
+                    : undefined
+                }
               />
             )
           })
@@ -432,6 +444,8 @@ function TutorCard({
   subjectTags,
   onClick,
   onBook,
+  onMessage,
+  onBookConsult,
 }: {
   tutor: TutorMatch
   photoUrl: string | null
@@ -443,6 +457,8 @@ function TutorCard({
   subjectTags: string[]
   onClick: () => void
   onBook: () => void
+  onMessage?: () => void
+  onBookConsult?: () => void
 }) {
   const baseBg = isFeatured
     ? 'linear-gradient(135deg,#3C1EE0 0%,#7A3AE8 60%,#C93FD8 100%)'
@@ -616,33 +632,98 @@ function TutorCard({
               {tutor.interests.slice(0, 3).join(', ')}
             </div>
           )}
+          {tutor.offersFreeConsultation && (
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                fontSize: 11,
+                fontWeight: 600,
+                color: isFeatured ? 'white' : '#7A3AE8',
+              }}
+            >
+              <Gift size={13} color={isFeatured ? 'white' : '#7A3AE8'} style={{ flexShrink: 0 }} />
+              Free 30-min consult
+            </div>
+          )}
         </div>
       )}
 
       {!isTutorViewer ? (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onBook()
-          }}
-          style={{
-            width: '100%',
-            height: 44,
-            borderRadius: 999,
-            border: 'none',
-            cursor: 'pointer',
-            background: isFeatured ? 'white' : MOBILE_GRAD,
-            color: isFeatured ? '#6C52E0' : 'white',
-            fontFamily: 'inherit',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            boxShadow: isFeatured ? '0 6px 20px rgba(0,0,0,0.2)' : '0 6px 14px rgba(122,58,232,0.28)',
-          }}
-        >
-          Book Now
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onMessage && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onMessage()
+              }}
+              aria-label={`Message ${tutor.name}`}
+              style={{
+                flex: '0 0 auto',
+                width: 44,
+                height: 44,
+                borderRadius: 999,
+                border: `1px solid ${isFeatured ? 'rgba(255,255,255,0.45)' : '#E6E3E8'}`,
+                background: isFeatured ? 'rgba(255,255,255,0.18)' : 'white',
+                color: isFeatured ? 'white' : '#5A5862',
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <MessageCircle size={18} />
+            </button>
+          )}
+          {onBookConsult && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onBookConsult()
+              }}
+              style={{
+                flex: '0 0 auto',
+                height: 44,
+                padding: '0 14px',
+                borderRadius: 999,
+                border: `1px solid ${isFeatured ? 'rgba(255,255,255,0.45)' : '#7A3AE8'}`,
+                background: isFeatured ? 'rgba(255,255,255,0.18)' : 'white',
+                color: isFeatured ? 'white' : '#7A3AE8',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Free Consult
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onBook()
+            }}
+            style={{
+              flex: '1 1 auto',
+              height: 44,
+              borderRadius: 999,
+              border: 'none',
+              cursor: 'pointer',
+              background: isFeatured ? 'white' : MOBILE_GRAD,
+              color: isFeatured ? '#6C52E0' : 'white',
+              fontFamily: 'inherit',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              boxShadow: isFeatured ? '0 6px 20px rgba(0,0,0,0.2)' : '0 6px 14px rgba(122,58,232,0.28)',
+            }}
+          >
+            Book Now
+          </button>
+        </div>
       ) : (
         <button
           disabled

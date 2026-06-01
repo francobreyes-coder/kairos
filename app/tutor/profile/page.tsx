@@ -120,6 +120,7 @@ interface ProfileData {
   services: string[]
   timezone: string
   qa: QaEntry[]
+  offersFreeConsultation: boolean
 }
 
 const inputCls =
@@ -261,6 +262,7 @@ export default function ProfileDashboard() {
           services: existing.services ?? [],
           timezone: existing.timezone ?? '',
           qa: Array.isArray(existing.qa) ? existing.qa : [],
+          offersFreeConsultation: existing.offers_free_consultation === true,
         }
         setProfile(loaded)
         setLoading(false)
@@ -779,14 +781,53 @@ export default function ProfileDashboard() {
                       </label>
                     )
                   })}
+
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                      editDraft.offersFreeConsultation
+                        ? 'border-accent bg-accent/5'
+                        : 'border-border hover:border-accent/30'
+                    }`}
+                  >
+                    <div
+                      onClick={() =>
+                        updateDraft('offersFreeConsultation', !editDraft.offersFreeConsultation)
+                      }
+                      className={`w-5 h-5 mt-0.5 rounded flex items-center justify-center border-2 transition-colors flex-shrink-0 ${
+                        editDraft.offersFreeConsultation ? 'bg-accent border-accent' : 'border-border'
+                      }`}
+                    >
+                      {editDraft.offersFreeConsultation && (
+                        <svg className="w-3 h-3 text-accent-foreground" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="text-sm">
+                      <div className="font-medium text-foreground">
+                        Offer a free 30-minute consultation
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Students get one free intro call per tutor. Books into your normal availability.
+                      </div>
+                    </div>
+                  </label>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {profile.services.map((s) => (
-                    <span key={s} className="px-2.5 py-1 bg-accent/10 text-accent text-xs rounded-full">
-                      {SERVICE_OPTIONS.find((o) => o.id === s)?.label ?? s}
-                    </span>
-                  ))}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {profile.services.map((s) => (
+                      <span key={s} className="px-2.5 py-1 bg-accent/10 text-accent text-xs rounded-full">
+                        {SERVICE_OPTIONS.find((o) => o.id === s)?.label ?? s}
+                      </span>
+                    ))}
+                  </div>
+                  {profile.offersFreeConsultation && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Free 30-min consultation</span>{' '}
+                      offered to new students.
+                    </p>
+                  )}
                 </div>
               )}
             </DashboardCard>

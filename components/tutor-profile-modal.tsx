@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { X, Star, Heart, Clock, GraduationCap, BookOpen, DollarSign, MessageCircle } from 'lucide-react'
+import { X, Star, Heart, Clock, GraduationCap, BookOpen, DollarSign, MessageCircle, Gift } from 'lucide-react'
 
 interface TutorProfileModalProps {
   tutor: {
@@ -19,6 +19,7 @@ interface TutorProfileModalProps {
     satScore?: number | null
     actScore?: number | null
     qa?: Array<{ question: string; answer: string }>
+    offersFreeConsultation?: boolean
     score: number
     reasons: string[]
   }
@@ -26,6 +27,12 @@ interface TutorProfileModalProps {
   // Omit onBook to render the modal in read-only mode (e.g. when a tutor
   // is browsing /find-tutors and can't book).
   onBook?: () => void
+  // Optional message CTA — opens /messages?with=<tutor> in the parent.
+  onMessage?: () => void
+  // Optional free-consultation CTA — only passed when the tutor offers it
+  // AND the viewer is allowed to book (not the tutor themselves, not a tutor
+  // viewer browsing).
+  onBookConsultation?: () => void
   // Marks the modal as the viewer's own profile so we can swap the booking
   // CTA for a "this is you" hint instead.
   isSelf?: boolean
@@ -74,7 +81,7 @@ function getAvatarColor(userId: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
-export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: TutorProfileModalProps) {
+export default function TutorProfileModal({ tutor, onClose, onBook, onMessage, onBookConsultation, isSelf }: TutorProfileModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -128,6 +135,13 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
         </div>
 
         <div className="modal-body">
+          {tutor.offersFreeConsultation && (
+            <div className="modal-consult-banner">
+              <Gift className="w-[16px] h-[16px]" />
+              <span>Offers a free 30-minute consultation</span>
+            </div>
+          )}
+
           {tutor.bio && (
             <section className="modal-section">
               <h3 className="modal-section-title">About</h3>
@@ -232,9 +246,26 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
 
         {onBook ? (
           <div className="modal-footer">
-            <button className="modal-book-btn" onClick={onBook}>
-              BOOK NOW
-            </button>
+            <div className="modal-cta-row">
+              {onMessage && (
+                <button
+                  className="modal-icon-btn"
+                  onClick={onMessage}
+                  aria-label={`Message ${tutor.name}`}
+                  title="Message"
+                >
+                  <MessageCircle className="w-[18px] h-[18px]" />
+                </button>
+              )}
+              {onBookConsultation && (
+                <button className="modal-consult-btn" onClick={onBookConsultation}>
+                  FREE CONSULT
+                </button>
+              )}
+              <button className="modal-book-btn" onClick={onBook}>
+                BOOK NOW
+              </button>
+            </div>
           </div>
         ) : isSelf ? (
           <div className="modal-footer">
@@ -502,6 +533,68 @@ export default function TutorProfileModal({ tutor, onClose, onBook, isSelf }: Tu
         }
         .modal-book-btn:active {
           transform: scale(0.97);
+        }
+        .modal-cta-row {
+          display: flex;
+          align-items: stretch;
+          gap: 10px;
+        }
+        .modal-cta-row .modal-book-btn {
+          flex: 1 1 auto;
+        }
+        .modal-icon-btn {
+          flex: 0 0 auto;
+          width: 48px;
+          height: 48px;
+          border-radius: 999px;
+          border: 1px solid #E6E3E8;
+          background: white;
+          color: #5A5862;
+          cursor: pointer;
+          display: grid;
+          place-items: center;
+          transition: border-color 0.12s, color 0.12s, transform 0.12s;
+        }
+        .modal-icon-btn:hover {
+          border-color: #7A3AE8;
+          color: #7A3AE8;
+        }
+        .modal-icon-btn:active {
+          transform: scale(0.96);
+        }
+        .modal-consult-btn {
+          flex: 0 0 auto;
+          height: 48px;
+          padding: 0 16px;
+          border-radius: 999px;
+          background: white;
+          color: #7A3AE8;
+          border: 1px solid #7A3AE8;
+          cursor: pointer;
+          font-family: var(--font-montserrat), 'Montserrat', sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          transition: background 0.12s, transform 0.12s;
+        }
+        .modal-consult-btn:hover {
+          background: #F5EEFE;
+        }
+        .modal-consult-btn:active {
+          transform: scale(0.97);
+        }
+        .modal-consult-banner {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px;
+          border-radius: 999px;
+          background: #F5EEFE;
+          color: #5B24CC;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 18px;
         }
         .modal-self-hint {
           text-align: center;

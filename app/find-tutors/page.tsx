@@ -15,6 +15,8 @@ import {
   Sparkles,
   ArrowLeft,
   Award,
+  MessageCircle,
+  Gift,
 } from 'lucide-react'
 import BookingModal from '@/components/booking-modal'
 import TutorProfileModal from '@/components/tutor-profile-modal'
@@ -37,6 +39,8 @@ interface TutorMatch {
   satScore: number | null
   actScore: number | null
   qa: Array<{ question: string; answer: string }>
+  offersFreeConsultation: boolean
+  consultationDurationMinutes: number
   score: number
   reasons: string[]
 }
@@ -118,6 +122,7 @@ export default function FindTutorsPage() {
     name: string
     services: string[]
     servicePrices: Record<string, number>
+    kind?: 'paid' | 'consultation'
   } | null>(null)
   const [profileTutor, setProfileTutor] = useState<TutorMatch | null>(null)
 
@@ -263,6 +268,20 @@ export default function FindTutorsPage() {
               servicePrices: t.servicePrices,
             })
           }
+          onBookConsult={(t) =>
+            setBookingTutor({
+              id: t.userId,
+              name: t.name,
+              services: t.services,
+              servicePrices: t.servicePrices,
+              kind: 'consultation',
+            })
+          }
+          onMessage={(t) =>
+            router.push(
+              `/messages?with=${encodeURIComponent(t.userId)}&name=${encodeURIComponent(t.name)}`,
+            )
+          }
           onClearFilters={clearFilters}
         />
         {bookingTutor && !isTutorViewer && (
@@ -271,6 +290,7 @@ export default function FindTutorsPage() {
             tutorName={bookingTutor.name}
             services={bookingTutor.services}
             servicePrices={bookingTutor.servicePrices}
+            kind={bookingTutor.kind ?? 'paid'}
             onClose={() => setBookingTutor(null)}
             onBooked={() => setBookingTutor(null)}
           />
@@ -591,25 +611,63 @@ export default function FindTutorsPage() {
                         {tutor.interests.slice(0, 3).join(', ')}
                       </div>
                     )}
+                    {tutor.offersFreeConsultation && (
+                      <div className="tcard-meta-row tcard-consult">
+                        <Gift className="tcard-meta-icon w-[14px] h-[14px]" />
+                        Free 30-min consult
+                      </div>
+                    )}
                   </div>
 
-                  {/* Book Now — hidden for tutor viewers since they can't book.
+                  {/* CTAs — hidden for tutor viewers since they can't book.
                        Their own card shows a "Your Profile" badge instead. */}
                   {!isTutorViewer ? (
-                    <button
-                      className="btn-book"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setBookingTutor({
-                          id: tutor.userId,
-                          name: tutor.name,
-                          services: tutor.services,
-                          servicePrices: tutor.servicePrices,
-                        })
-                      }}
-                    >
-                      BOOK NOW
-                    </button>
+                    <div className="tcard-cta-row">
+                      <button
+                        className="tcard-icon-btn"
+                        aria-label={`Message ${tutor.name}`}
+                        title="Message"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(
+                            `/messages?with=${encodeURIComponent(tutor.userId)}&name=${encodeURIComponent(tutor.name)}`,
+                          )
+                        }}
+                      >
+                        <MessageCircle className="w-[16px] h-[16px]" />
+                      </button>
+                      {tutor.offersFreeConsultation && (
+                        <button
+                          className="btn-book btn-book-consult"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setBookingTutor({
+                              id: tutor.userId,
+                              name: tutor.name,
+                              services: tutor.services,
+                              servicePrices: tutor.servicePrices,
+                              kind: 'consultation',
+                            })
+                          }}
+                        >
+                          FREE CONSULT
+                        </button>
+                      )}
+                      <button
+                        className="btn-book"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setBookingTutor({
+                            id: tutor.userId,
+                            name: tutor.name,
+                            services: tutor.services,
+                            servicePrices: tutor.servicePrices,
+                          })
+                        }}
+                      >
+                        BOOK NOW
+                      </button>
+                    </div>
                   ) : (
                     <button className="btn-book disabled" disabled>
                       {isSelf ? 'YOUR PROFILE' : 'PREVIEW ONLY'}
@@ -628,6 +686,7 @@ export default function FindTutorsPage() {
           tutorName={bookingTutor.name}
           services={bookingTutor.services}
           servicePrices={bookingTutor.servicePrices}
+          kind={bookingTutor.kind ?? 'paid'}
           onClose={() => setBookingTutor(null)}
           onBooked={() => setBookingTutor(null)}
         />
@@ -638,6 +697,15 @@ export default function FindTutorsPage() {
           tutor={profileTutor}
           isSelf={profileTutor.userId === viewerSelfId}
           onClose={() => setProfileTutor(null)}
+          onMessage={
+            isTutorViewer || profileTutor.userId === viewerSelfId
+              ? undefined
+              : () => {
+                  router.push(
+                    `/messages?with=${encodeURIComponent(profileTutor.userId)}&name=${encodeURIComponent(profileTutor.name)}`,
+                  )
+                }
+          }
           onBook={
             isTutorViewer
               ? undefined
@@ -647,6 +715,20 @@ export default function FindTutorsPage() {
                     name: profileTutor.name,
                     services: profileTutor.services,
                     servicePrices: profileTutor.servicePrices,
+                  })
+                  setProfileTutor(null)
+                }
+          }
+          onBookConsultation={
+            isTutorViewer || !profileTutor.offersFreeConsultation
+              ? undefined
+              : () => {
+                  setBookingTutor({
+                    id: profileTutor.userId,
+                    name: profileTutor.name,
+                    services: profileTutor.services,
+                    servicePrices: profileTutor.servicePrices,
+                    kind: 'consultation',
                   })
                   setProfileTutor(null)
                 }
@@ -1019,6 +1101,77 @@ export default function FindTutorsPage() {
           font-weight: 700;
           letter-spacing: 0.1em;
           text-transform: uppercase;
+        }
+
+        /* CTA row: message icon + (optional) consult button + book now */
+        .tcard-cta-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .tcard-icon-btn {
+          flex: 0 0 auto;
+          width: 44px;
+          height: 44px;
+          border-radius: 999px;
+          border: 1px solid #E6E3E8;
+          background: white;
+          color: #5A5862;
+          cursor: pointer;
+          display: grid;
+          place-items: center;
+          transition: border-color 0.12s, color 0.12s, transform 0.12s;
+        }
+        .tcard-icon-btn:hover {
+          border-color: #7A3AE8;
+          color: #7A3AE8;
+        }
+        .tcard-icon-btn:active {
+          transform: scale(0.95);
+        }
+        .btn-book.btn-book-consult {
+          flex: 0 0 auto;
+          width: auto;
+          padding: 0 14px;
+          background: white;
+          color: #7A3AE8;
+          border: 1px solid #7A3AE8;
+          box-shadow: none;
+        }
+        .btn-book.btn-book-consult:hover {
+          background: #F5EEFE;
+          opacity: 1;
+        }
+        .tcard-consult {
+          color: #7A3AE8;
+          font-weight: 600;
+        }
+        .tcard-consult .tcard-meta-icon {
+          color: #7A3AE8;
+        }
+        .tcard-cta-row .btn-book:not(.btn-book-consult) {
+          flex: 1 1 auto;
+        }
+        .tcard.featured .tcard-icon-btn {
+          background: rgba(255, 255, 255, 0.15);
+          border-color: rgba(255, 255, 255, 0.35);
+          color: white;
+        }
+        .tcard.featured .tcard-icon-btn:hover {
+          background: rgba(255, 255, 255, 0.25);
+          color: white;
+        }
+        .tcard.featured .btn-book.btn-book-consult {
+          background: rgba(255, 255, 255, 0.15);
+          color: white;
+          border-color: rgba(255, 255, 255, 0.35);
+        }
+        .tcard.featured .btn-book.btn-book-consult:hover {
+          background: rgba(255, 255, 255, 0.25);
+        }
+        .tcard.featured .tcard-consult,
+        .tcard.featured .tcard-consult .tcard-meta-icon {
+          color: white;
         }
 
         /* ── FEATURED CARD ── */

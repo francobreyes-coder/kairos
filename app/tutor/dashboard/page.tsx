@@ -66,6 +66,8 @@ interface DashboardSession {
   // Already computed server-side from the session's stored
   // stripe_application_fee_amount, so the UI doesn't have to re-derive it.
   net_earnings: number
+  // 'consultation' rows are free 30-min intros and never contribute earnings.
+  session_type?: 'paid' | 'consultation'
 }
 
 interface DashboardStats {
@@ -555,15 +557,37 @@ function SessRow({
   // not the viewer's display tz — the live-window math is the same instant
   // regardless of where the tutor is currently sitting.
   const canJoin = !past && s.status === 'confirmed' && isWithinSessionWindow(s)
+  const isConsult = s.session_type === 'consultation'
   // Show the tutor's net take (price − Kairos fee) — this is the value
   // Stripe actually transfers to their connected account.
-  const priceLabel = s.net_earnings > 0 ? `+$${Math.round(s.net_earnings)}` : ''
+  const priceLabel = !isConsult && s.net_earnings > 0 ? `+$${Math.round(s.net_earnings)}` : ''
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid #E6E3E8' }}>
       <Avatar initials={initialsOf(s.student_name)} color={avatarColor(s.student_id)} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#1C1B1F' }}>{s.student_name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1C1B1F' }}>{s.student_name}</span>
+          {isConsult && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: '#F5EEFE',
+                color: '#5B24CC',
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Free consult
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 12, color: '#5A5862', marginTop: 2 }}>
           {s.student_sub ? `${s.student_sub} · ` : ''}{formatWhen(s, viewerTz)}
         </div>

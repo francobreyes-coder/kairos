@@ -163,6 +163,9 @@ export async function POST(req: Request) {
   // doesn't offer that service. Accept null explicitly so deselecting clears.
   if (body.satScore !== undefined) profileData.sat_score = body.satScore
   if (body.actScore !== undefined) profileData.act_score = body.actScore
+  if (typeof body.offersFreeConsultation === 'boolean') {
+    profileData.offers_free_consultation = body.offersFreeConsultation
+  }
   if (Array.isArray(body.qa)) {
     profileData.qa = body.qa
       .map((entry: unknown) => {

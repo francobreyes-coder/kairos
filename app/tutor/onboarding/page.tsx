@@ -134,6 +134,7 @@ interface ProfileData {
   satScore: string
   actScore: string
   qa: QaEntry[]
+  offersFreeConsultation: boolean
 }
 
 const emptyProfile: ProfileData = {
@@ -149,6 +150,7 @@ const emptyProfile: ProfileData = {
   satScore: '',
   actScore: '',
   qa: [],
+  offersFreeConsultation: false,
 }
 
 function isValidSatScore(raw: string): boolean {
@@ -308,6 +310,7 @@ export default function OnboardingPage() {
           satScore: existing?.sat_score != null ? String(existing.sat_score) : '',
           actScore: existing?.act_score != null ? String(existing.act_score) : '',
           qa: Array.isArray(existing?.qa) ? existing.qa : [],
+          offersFreeConsultation: existing?.offers_free_consultation === true,
         }))
         setLoading(false)
       })
@@ -770,6 +773,36 @@ export default function OnboardingPage() {
                     No specific services were approved. Contact support if this seems wrong.
                   </p>
                 )}
+
+                <label
+                  className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                    profile.offersFreeConsultation
+                      ? 'border-accent bg-accent/5'
+                      : 'border-border hover:border-accent/30'
+                  }`}
+                >
+                  <div
+                    onClick={() => update('offersFreeConsultation', !profile.offersFreeConsultation)}
+                    className={`w-5 h-5 mt-0.5 rounded flex items-center justify-center border-2 transition-colors flex-shrink-0 ${
+                      profile.offersFreeConsultation ? 'bg-accent border-accent' : 'border-border'
+                    }`}
+                  >
+                    {profile.offersFreeConsultation && (
+                      <svg className="w-3 h-3 text-accent-foreground" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-medium text-foreground">
+                      Offer a free 30-minute consultation
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Students can book one free intro call before paying for a session. Uses your
+                      existing availability. We&apos;ll show a badge on your card to help you stand out.
+                    </div>
+                  </div>
+                </label>
 
                 {(profile.services.includes('sat') || profile.services.includes('act')) && (
                   <div className="pt-2 border-t border-border space-y-4">

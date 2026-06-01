@@ -96,7 +96,7 @@ export async function GET() {
   const tutorIds = Array.from(new Set([...candidateIds, tutorUserId]))
   const { data: sessions, error } = await supabase
     .from('sessions')
-    .select('id, student_id, tutor_id, day_of_week, time_slot, scheduled_date, status, price, payment_status, notes, created_at, timezone, stripe_payment_intent_id, stripe_application_fee_amount')
+    .select('id, student_id, tutor_id, day_of_week, time_slot, scheduled_date, status, price, payment_status, notes, created_at, timezone, stripe_payment_intent_id, stripe_application_fee_amount, session_type')
     .in('tutor_id', tutorIds)
     .order('scheduled_date', { ascending: true })
 
