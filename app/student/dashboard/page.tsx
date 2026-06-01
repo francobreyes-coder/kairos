@@ -83,7 +83,19 @@ function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-function Avatar({ initials, color, size = 44 }: { initials: string; color?: string; size?: number }) {
+function Avatar({ initials, color, size = 44, src }: { initials: string; color?: string; size?: number; src?: string | null }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{
+          width: size, height: size, borderRadius: '50%', flexShrink: 0,
+          objectFit: 'cover', display: 'block',
+        }}
+      />
+    )
+  }
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
@@ -188,6 +200,8 @@ interface ApiSession {
   created_at: string
   student_name: string
   tutor_name: string
+  student_photo: string | null
+  tutor_photo: string | null
   is_tutor: boolean
   timezone: string | null
 }
@@ -195,6 +209,7 @@ interface ApiSession {
 interface ApiConversation {
   partner_id: string
   partner_name: string
+  partner_photo: string | null
   last_message: string
   last_message_at: string
   last_message_is_mine: boolean
@@ -293,6 +308,7 @@ function relativeTime(iso: string): string {
 // ═══════════════════════════════════════════════════════════════════════
 function SessionRow({ s, onJoin, onViewNotes }: { s: ApiSession; onJoin?: () => void; onViewNotes?: () => void }) {
   const counterpart = s.is_tutor ? s.student_name : s.tutor_name
+  const counterpartPhoto = s.is_tutor ? s.student_photo : s.tutor_photo
   const upcoming = isUpcoming(s)
   const viewerTz = useViewerTimezone()
   return (
@@ -300,7 +316,7 @@ function SessionRow({ s, onJoin, onViewNotes }: { s: ApiSession; onJoin?: () => 
       display: 'flex', alignItems: 'center', gap: 14,
       padding: '14px 0', borderBottom: '1px solid var(--hair)',
     }}>
-      <Avatar initials={initialsOf(counterpart)} color={avatarColor(s.id)} size={44} />
+      <Avatar initials={initialsOf(counterpart)} color={avatarColor(s.id)} size={44} src={counterpartPhoto} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{counterpart}</div>
         <div style={{ fontSize: 12, color: 'var(--graphite)', marginTop: 2 }}>
@@ -475,7 +491,7 @@ function PanelHome({
                 onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--s1)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={36} />
+                <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={36} src={c.partner_photo} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{c.partner_name}</div>
                   <div style={{ fontSize: 12, color: 'var(--mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.last_message}</div>
@@ -708,11 +724,13 @@ function PanelMessages({
   conversations,
   myInitials,
   myFullName,
+  myPhoto,
   initialPartnerId,
 }: {
   conversations: ApiConversation[]
   myInitials: string
   myFullName: string
+  myPhoto: string | null
   initialPartnerId: string | null
 }) {
   const [activeId, setActiveId] = useState<string | null>(
@@ -846,7 +864,7 @@ function PanelMessages({
               display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', cursor: 'pointer',
               background: isActive ? 'var(--p050)' : 'transparent', transition: 'background .15s',
             }}>
-              <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={40} />
+              <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={40} src={c.partner_photo} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{c.partner_name}</div>
                 <div style={{ fontSize: 12, color: 'var(--mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.last_message}</div>
@@ -860,7 +878,7 @@ function PanelMessages({
         {activePartner ? (
           <>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <Avatar initials={initialsOf(activePartner.partner_name)} color={avatarColor(activePartner.partner_id)} size={36} />
+              <Avatar initials={initialsOf(activePartner.partner_name)} color={avatarColor(activePartner.partner_id)} size={36} src={activePartner.partner_photo} />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{activePartner.partner_name}</div>
               </div>
@@ -879,6 +897,7 @@ function PanelMessages({
                     <Avatar
                       initials={me ? myInitials : initialsOf(activePartner.partner_name)}
                       color={me ? avatarColor(myFullName || 'me') : avatarColor(activePartner.partner_id)}
+                      src={me ? myPhoto : activePartner.partner_photo}
                       size={28}
                     />
                     <div>
@@ -1633,6 +1652,7 @@ function StudentDashboardInner() {
               conversations={conversations}
               myInitials={myInitials}
               myFullName={fullName}
+              myPhoto={photoPathForUrl ?? null}
               initialPartnerId={pendingPartnerId}
             />
           )}

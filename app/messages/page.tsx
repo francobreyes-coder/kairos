@@ -18,6 +18,7 @@ import {
 interface Conversation {
   partner_id: string
   partner_name: string
+  partner_photo: string | null
   last_message: string
   last_message_at: string
   last_message_is_mine: boolean
@@ -83,8 +84,8 @@ function MessagesContent() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
-  const [activePartner, setActivePartner] = useState<{ id: string; name: string } | null>(
-    initialWith && initialName ? { id: initialWith, name: initialName } : null
+  const [activePartner, setActivePartner] = useState<{ id: string; name: string; photo: string | null } | null>(
+    initialWith && initialName ? { id: initialWith, name: initialName, photo: null } : null
   )
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [loadingConvos, setLoadingConvos] = useState(true)
@@ -133,6 +134,14 @@ function MessagesContent() {
         setMessages(data.messages ?? [])
         if (data.myIds) setMyIds(data.myIds)
         setConversationId(data.conversationId ?? null)
+        // If we arrived here via ?with=&name= (no photo from a conversation
+        // click), backfill the photo so the thread header isn't stuck on
+        // initials.
+        if (data.partnerPhoto) {
+          setActivePartner((curr) =>
+            curr && !curr.photo ? { ...curr, photo: data.partnerPhoto } : curr,
+          )
+        }
       })
       .catch(() => {
         if (!cancelled) setError('Failed to load messages')
@@ -252,6 +261,7 @@ function MessagesContent() {
             {
               partner_id: activePartner.id,
               partner_name: activePartner.name,
+              partner_photo: activePartner.photo,
               last_message: draft.trim(),
               last_message_at: new Date().toISOString(),
               last_message_is_mine: true,
@@ -274,8 +284,8 @@ function MessagesContent() {
     }
   }
 
-  function selectPartner(id: string, name: string) {
-    setActivePartner({ id, name })
+  function selectPartner(id: string, name: string, photo: string | null) {
+    setActivePartner({ id, name, photo })
     setMessages([])
   }
 
@@ -337,15 +347,23 @@ function MessagesContent() {
                     conversations.map((conv) => (
                       <button
                         key={conv.partner_id}
-                        onClick={() => selectPartner(conv.partner_id, conv.partner_name)}
+                        onClick={() => selectPartner(conv.partner_id, conv.partner_name, conv.partner_photo)}
                         className={`w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors border-b border-border/50 ${
                           activePartner?.id === conv.partner_id ? 'bg-accent/5' : ''
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
-                            <User className="w-4 h-4 text-accent" />
-                          </div>
+                          {conv.partner_photo ? (
+                            <img
+                              src={conv.partner_photo}
+                              alt=""
+                              className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+                              <User className="w-4 h-4 text-accent" />
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-sm font-medium text-foreground truncate">
@@ -385,9 +403,17 @@ function MessagesContent() {
                       >
                         <ArrowLeft className="w-4 h-4" />
                       </button>
-                      <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center">
-                        <User className="w-4 h-4 text-accent" />
-                      </div>
+                      {activePartner.photo ? (
+                        <img
+                          src={activePartner.photo}
+                          alt=""
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center">
+                          <User className="w-4 h-4 text-accent" />
+                        </div>
+                      )}
                       <span className="text-sm font-semibold text-foreground">
                         {activePartner.name}
                       </span>

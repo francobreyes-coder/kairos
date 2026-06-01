@@ -137,6 +137,7 @@ interface TutorAttempt {
 interface Conversation {
   partner_id: string
   partner_name: string
+  partner_photo: string | null
   last_message: string
   last_message_at: string
   last_message_is_mine: boolean
@@ -1071,7 +1072,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
-  const [active, setActive] = useState<{ id: string; name: string } | null>(null)
+  const [active, setActive] = useState<{ id: string; name: string; photo: string | null } | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [loadingConvos, setLoadingConvos] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -1087,7 +1088,8 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
         setConversations(data.conversations ?? [])
         if (data.myIds) setMyIds(data.myIds)
         if (!active && data.conversations?.length) {
-          setActive({ id: data.conversations[0].partner_id, name: data.conversations[0].partner_name })
+          const first = data.conversations[0]
+          setActive({ id: first.partner_id, name: first.partner_name, photo: first.partner_photo ?? null })
         }
       })
       .catch(() => setError('Failed to load conversations'))
@@ -1188,6 +1190,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
           {
             partner_id: active.id,
             partner_name: active.name,
+            partner_photo: active.photo,
             last_message: sent,
             last_message_at: new Date().toISOString(),
             last_message_is_mine: true,
@@ -1239,7 +1242,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
             return (
               <button
                 key={c.partner_id}
-                onClick={() => setActive({ id: c.partner_id, name: c.partner_name })}
+                onClick={() => setActive({ id: c.partner_id, name: c.partner_name, photo: c.partner_photo ?? null })}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1252,7 +1255,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
                   textAlign: 'left',
                 }}
               >
-                <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={40} />
+                <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={40} src={c.partner_photo} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F' }}>{c.partner_name}</div>
                   <div style={{ fontSize: 12, color: '#8A8792', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1275,7 +1278,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
         ) : (
           <>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid #E6E3E8', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <Avatar initials={initialsOf(active.name)} color={avatarColor(active.id)} size={36} />
+              <Avatar initials={initialsOf(active.name)} color={avatarColor(active.id)} size={36} src={active.photo} />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{active.name}</div>
                 <div style={{ fontSize: 12, color: '#8A8792', fontWeight: 500 }}>Student</div>
@@ -1299,7 +1302,7 @@ function PanelMessages({ tutorPhoto }: { tutorPhoto: string | null }) {
                       <Avatar
                         initials={mine ? tutorInitials : initialsOf(active.name)}
                         color={mine ? avatarColor(session?.user?.id ?? 'me') : avatarColor(active.id)}
-                        src={mine ? tutorPhoto : null}
+                        src={mine ? tutorPhoto : active.photo}
                         size={28}
                       />
                       <div>

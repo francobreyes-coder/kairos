@@ -9,6 +9,7 @@ import { getBrowserSupabase } from '@/lib/supabase-browser'
 interface ApiConversation {
   partner_id: string
   partner_name: string
+  partner_photo: string | null
   last_message: string
   last_message_at: string
   last_message_is_mine: boolean
@@ -82,7 +83,7 @@ export function MobileMessages({
 }) {
   const [conversations, setConversations] = useState<ApiConversation[]>([])
   const [loadingConvos, setLoadingConvos] = useState(true)
-  const [active, setActive] = useState<{ id: string; name: string } | null>(null)
+  const [active, setActive] = useState<{ id: string; name: string; photo: string | null } | null>(null)
   const [messages, setMessages] = useState<ApiMessage[]>([])
   const [myIds, setMyIds] = useState<string[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -96,7 +97,7 @@ export function MobileMessages({
   // thrash on the iOS WKWebView is the suspected cause of the WebKit
   // "this page couldn't load" page-process crash.
   const myIdsRef = useRef<string[]>([])
-  const activeRef = useRef<{ id: string; name: string } | null>(null)
+  const activeRef = useRef<{ id: string; name: string; photo: string | null } | null>(null)
   useEffect(() => { myIdsRef.current = myIds }, [myIds])
   useEffect(() => { activeRef.current = active }, [active])
 
@@ -113,7 +114,7 @@ export function MobileMessages({
         if (d.myIds) setMyIds(d.myIds)
         if (initialPartnerId) {
           const match = convos.find((c) => c.partner_id === initialPartnerId)
-          if (match) setActive({ id: match.partner_id, name: match.partner_name })
+          if (match) setActive({ id: match.partner_id, name: match.partner_name, photo: match.partner_photo ?? null })
         }
       })
       .catch(() => setError('Failed to load conversations'))
@@ -137,6 +138,9 @@ export function MobileMessages({
         setMessages(d.messages ?? [])
         if (d.myIds) setMyIds(d.myIds)
         setConversationId(d.conversationId ?? null)
+        if (d.partnerPhoto) {
+          setActive((curr) => (curr && !curr.photo ? { ...curr, photo: d.partnerPhoto } : curr))
+        }
       })
       .catch(() => {
         if (!cancelled) setError('Failed to load thread')
@@ -237,6 +241,7 @@ export function MobileMessages({
           {
             partner_id: active.id,
             partner_name: active.name,
+            partner_photo: active.photo,
             last_message: text,
             last_message_at: new Date().toISOString(),
             last_message_is_mine: true,
@@ -257,7 +262,7 @@ export function MobileMessages({
   if (active) {
     return (
       <div style={{ padding: '0 0 12px' }}>
-        <ThreadHeader name={active.name} id={active.id} onBack={() => setActive(null)} />
+        <ThreadHeader name={active.name} id={active.id} photo={active.photo} onBack={() => setActive(null)} />
         <div
           ref={bodyRef}
           style={{
@@ -308,7 +313,7 @@ export function MobileMessages({
                     <Avatar
                       initials={mine ? myInitials : initialsOf(active.name)}
                       color={mine ? avatarColor(myFullName || 'me') : avatarColor(active.id)}
-                      src={mine ? myPhoto : null}
+                      src={mine ? myPhoto : active.photo}
                       size={26}
                     />
                   )}
@@ -460,7 +465,7 @@ export function MobileMessages({
           conversations.map((c) => (
             <button
               key={c.partner_id}
-              onClick={() => setActive({ id: c.partner_id, name: c.partner_name })}
+              onClick={() => setActive({ id: c.partner_id, name: c.partner_name, photo: c.partner_photo ?? null })}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -474,7 +479,7 @@ export function MobileMessages({
                 textAlign: 'left',
               }}
             >
-              <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={42} />
+              <Avatar initials={initialsOf(c.partner_name)} color={avatarColor(c.partner_id)} size={42} src={c.partner_photo} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F' }}>{c.partner_name}</div>
                 <div
@@ -500,7 +505,7 @@ export function MobileMessages({
   )
 }
 
-function ThreadHeader({ name, id, onBack }: { name: string; id: string; onBack: () => void }) {
+function ThreadHeader({ name, id, photo, onBack }: { name: string; id: string; photo: string | null; onBack: () => void }) {
   return (
     <div
       style={{
@@ -527,7 +532,7 @@ function ThreadHeader({ name, id, onBack }: { name: string; id: string; onBack: 
       >
         <ArrowLeft size={18} />
       </button>
-      <Avatar initials={initialsOf(name)} color={avatarColor(id)} size={36} />
+      <Avatar initials={initialsOf(name)} color={avatarColor(id)} size={36} src={photo} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: '#1C1B1F' }}>{name}</div>
       </div>

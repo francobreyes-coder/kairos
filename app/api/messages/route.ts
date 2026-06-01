@@ -198,6 +198,95 @@ async function fetchNameMap(
   return nameMap
 }
 
+// Resolve profile photo URLs for a batch of user ids. tutor_profiles wins over
+// students for the same id (a college-student tutor might have rows in both
+// during onboarding). Raw paths are pre-wrapped as /api/storage URLs so the
+// client doesn't need to know about the storage indirection.
+async function fetchPhotoMap(
+  supabase: Supa,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const photoMap = new Map<string, string>()
+  if (userIds.length === 0) return photoMap
+
+  const toUrl = (path: string) => `/api/storage?path=${encodeURIComponent(path)}`
+
+  const { data: students } = await supabase
+    .from('students')
+    .select('user_id, profile_photo')
+    .in('user_id', userIds)
+  if (students) {
+    for (const s of students) {
+      if (s.profile_photo) photoMap.set(s.user_id, toUrl(s.profile_photo))
+    }
+  }
+
+  const { data: tutors } = await supabase
+    .from('tutor_profiles')
+    .select('user_id, profile_photo')
+    .in('user_id', userIds)
+  if (tutors) {
+    for (const t of tutors) {
+      if (t.profile_photo) photoMap.set(t.user_id, toUrl(t.profile_photo))
+    }
+  }
+
+  // Email bridge for drifted ids (same shape as fetchNameMap's fallback).
+  const missing = userIds.filter((id) => !photoMap.has(id))
+  if (missing.length > 0) {
+    const { data: missingUsers } = await supabase
+      .from('users')
+      .select('id, email')
+      .in('id', missing)
+    if (missingUsers) {
+      const emailToIds = new Map<string, string[]>()
+      for (const u of missingUsers) {
+        if (!u.email) continue
+        const arr = emailToIds.get(u.email) ?? []
+        arr.push(u.id)
+        emailToIds.set(u.email, arr)
+      }
+      if (emailToIds.size > 0) {
+        const emails = Array.from(emailToIds.keys())
+        const { data: usersByEmail } = await supabase
+          .from('users')
+          .select('id, email')
+          .in('email', emails)
+        const idsByEmail = new Map<string, string[]>()
+        for (const u of usersByEmail ?? []) {
+          if (!u.email) continue
+          const arr = idsByEmail.get(u.email) ?? []
+          arr.push(u.id)
+          idsByEmail.set(u.email, arr)
+        }
+        const allRelatedIds = new Set<string>()
+        for (const ids of idsByEmail.values()) for (const id of ids) allRelatedIds.add(id)
+        if (allRelatedIds.size > 0) {
+          const { data: tutorsRelated } = await supabase
+            .from('tutor_profiles')
+            .select('user_id, profile_photo')
+            .in('user_id', Array.from(allRelatedIds))
+          const photoByRelatedId = new Map<string, string>()
+          for (const t of tutorsRelated ?? []) {
+            if (t.profile_photo) photoByRelatedId.set(t.user_id, toUrl(t.profile_photo))
+          }
+          // Walk every email back to its drifted ids and apply the photo.
+          for (const [email, drifted] of emailToIds) {
+            const related = idsByEmail.get(email) ?? []
+            const url = related.map((id) => photoByRelatedId.get(id)).find(Boolean)
+            if (!url) continue
+            for (const id of drifted) {
+              if (!photoMap.has(id)) photoMap.set(id, url)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return photoMap
+}
+
 // GET /api/messages
 //   no params              → conversation list for the current user
 //   ?with=<partnerId>      → messages in the conversation with that partner
@@ -239,10 +328,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
     }
 
+    const { data: others } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationIdParam)
+    const partnerId = (others ?? []).map((o) => o.user_id).find((id) => !myIds.has(id)) ?? null
+    const partnerPhoto = partnerId
+      ? (await fetchPhotoMap(supabase, [partnerId])).get(partnerId) ?? null
+      : null
+
     return NextResponse.json({
       messages: messages ?? [],
       myIds: myIdArray,
       conversationId: conversationIdParam,
+      partnerPhoto,
     })
   }
 
@@ -250,12 +349,16 @@ export async function GET(req: NextRequest) {
   if (withUser) {
     const partnerIds = await resolveAllIds(withUser)
     const conversationId = await findExistingConversation(supabase, myIds, partnerIds)
+    const partnerPhotoMap = await fetchPhotoMap(supabase, Array.from(partnerIds))
+    const partnerPhoto =
+      Array.from(partnerIds).map((id) => partnerPhotoMap.get(id)).find(Boolean) ?? null
 
     if (!conversationId) {
       return NextResponse.json({
         messages: [],
         myIds: myIdArray,
         conversationId: null,
+        partnerPhoto,
       })
     }
 
@@ -274,6 +377,7 @@ export async function GET(req: NextRequest) {
       messages: messages ?? [],
       myIds: myIdArray,
       conversationId,
+      partnerPhoto,
     })
   }
 
@@ -328,7 +432,11 @@ export async function GET(req: NextRequest) {
 
   const allPartnerIds = new Set<string>()
   for (const arr of partnersByConv.values()) for (const id of arr) allPartnerIds.add(id)
-  const nameMap = await fetchNameMap(supabase, Array.from(allPartnerIds))
+  const partnerIdArr = Array.from(allPartnerIds)
+  const [nameMap, photoMap] = await Promise.all([
+    fetchNameMap(supabase, partnerIdArr),
+    fetchPhotoMap(supabase, partnerIdArr),
+  ])
 
   const conversations = convIds
     .map((convId) => {
@@ -340,6 +448,7 @@ export async function GET(req: NextRequest) {
         conversation_id: convId,
         partner_id: partnerId,
         partner_name: nameMap.get(partnerId) ?? 'Unknown',
+        partner_photo: photoMap.get(partnerId) ?? null,
         last_message: latest.content,
         last_message_at: latest.created_at,
         last_message_is_mine: myIds.has(latest.sender_id),

@@ -30,6 +30,8 @@ interface ApiSession {
   created_at: string
   student_name: string
   tutor_name: string
+  student_photo: string | null
+  tutor_photo: string | null
   is_tutor: boolean
   timezone: string | null
 }
@@ -56,6 +58,7 @@ interface AssignedTest {
 interface ApiConversation {
   partner_id: string
   partner_name: string
+  partner_photo: string | null
   last_message: string
   last_message_at: string
   last_message_is_mine: boolean
@@ -162,6 +165,7 @@ export function MobileStudentDashboard({
   const past = sessions.filter(isPast)
   const nextSession = upcoming[0]
   const counterpart = (s: ApiSession) => (s.is_tutor ? s.student_name : s.tutor_name)
+  const counterpartPhoto = (s: ApiSession) => (s.is_tutor ? s.student_photo : s.tutor_photo)
   const hasMessages = conversations.some((c) => !c.last_message_is_mine)
 
   const activeTab: MobileTabId = PANEL_TO_TAB[panel] ?? 'home'
@@ -183,6 +187,7 @@ export function MobileStudentDashboard({
           firstName={firstName}
           nextSession={nextSession}
           counterpartOf={counterpart}
+          counterpartPhotoOf={counterpartPhoto}
           viewerTz={viewerTz}
           tests={tests}
           upcoming={upcoming}
@@ -199,6 +204,7 @@ export function MobileStudentDashboard({
           upcoming={upcoming}
           past={past}
           counterpartOf={counterpart}
+          counterpartPhotoOf={counterpartPhoto}
           viewerTz={viewerTz}
           onJoinSession={onJoinSession}
         />
@@ -246,6 +252,7 @@ function HomeBody({
   firstName,
   nextSession,
   counterpartOf,
+  counterpartPhotoOf,
   viewerTz,
   tests,
   upcoming,
@@ -258,6 +265,7 @@ function HomeBody({
   firstName: string
   nextSession: ApiSession | undefined
   counterpartOf: (s: ApiSession) => string
+  counterpartPhotoOf: (s: ApiSession) => string | null
   viewerTz: string
   tests: AssignedTest[]
   upcoming: ApiSession[]
@@ -354,6 +362,7 @@ function HomeBody({
               color={avatarColor(nextSession.id)}
               size={42}
               border
+              src={counterpartPhotoOf(nextSession)}
             />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>
@@ -442,7 +451,7 @@ function HomeBody({
                     cursor: 'pointer',
                   }}
                 >
-                  <Avatar initials={initialsOf(counterpartOf(s))} color={avatarColor(s.id)} size={40} />
+                  <Avatar initials={initialsOf(counterpartOf(s))} color={avatarColor(s.id)} size={40} src={counterpartPhotoOf(s)} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F' }}>{counterpartOf(s)}</div>
                     <div
@@ -525,12 +534,14 @@ function SessionsBody({
   upcoming,
   past,
   counterpartOf,
+  counterpartPhotoOf,
   viewerTz,
   onJoinSession,
 }: {
   upcoming: ApiSession[]
   past: ApiSession[]
   counterpartOf: (s: ApiSession) => string
+  counterpartPhotoOf: (s: ApiSession) => string | null
   viewerTz: string
   onJoinSession: (id: string) => void
 }) {
@@ -557,7 +568,7 @@ function SessionsBody({
                     cursor: 'pointer',
                   }}
                 >
-                  <Avatar initials={initialsOf(counterpartOf(s))} color={avatarColor(s.id)} size={40} />
+                  <Avatar initials={initialsOf(counterpartOf(s))} color={avatarColor(s.id)} size={40} src={counterpartPhotoOf(s)} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F' }}>{counterpartOf(s)}</div>
                     <div style={{ fontSize: 11, color: '#5A5862', marginTop: 2 }}>{s.notes || 'Tutoring session'}</div>
@@ -592,7 +603,7 @@ function SessionsBody({
                     borderBottom: '1px solid #E6E3E8',
                   }}
                 >
-                  <Avatar initials={initialsOf(counterpartOf(s))} color={avatarColor(s.id)} size={40} />
+                  <Avatar initials={initialsOf(counterpartOf(s))} color={avatarColor(s.id)} size={40} src={counterpartPhotoOf(s)} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1C1B1F' }}>{counterpartOf(s)}</div>
                     <div style={{ fontSize: 11, color: '#5A5862', marginTop: 2 }}>{s.notes || 'Tutoring session'}</div>
@@ -702,7 +713,24 @@ function HelpTile({ label, sub, icon, onClick }: { label: string; sub: string; i
   )
 }
 
-function Avatar({ initials, color, size = 40, border = false }: { initials: string; color: string; size?: number; border?: boolean }) {
+function Avatar({ initials, color, size = 40, border = false, src }: { initials: string; color: string; size?: number; border?: boolean; src?: string | null }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          flexShrink: 0,
+          objectFit: 'cover',
+          display: 'block',
+          border: border ? '2px solid rgba(255,255,255,0.35)' : undefined,
+        }}
+      />
+    )
+  }
   return (
     <div
       style={{

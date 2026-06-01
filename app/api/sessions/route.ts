@@ -70,11 +70,33 @@ export async function GET() {
     }
   }
 
+  // Photo lookup: tutors live in tutor_profiles, students in students. Both
+  // store the storage path; we pre-wrap as /api/storage URLs so the client
+  // can drop the value into an <img src> without rewriting.
+  const photoMap = new Map<string, string>()
+  const toPhotoUrl = (path: string) => `/api/storage?path=${encodeURIComponent(path)}`
+  if (userIds.size > 0) {
+    const userIdArr = Array.from(userIds)
+    const [{ data: tutorPhotos }, { data: studentPhotos }] = await Promise.all([
+      supabase.from('tutor_profiles').select('user_id, profile_photo').in('user_id', userIdArr),
+      supabase.from('students').select('user_id, profile_photo').in('user_id', userIdArr),
+    ])
+    for (const s of studentPhotos ?? []) {
+      if (s.profile_photo) photoMap.set(s.user_id, toPhotoUrl(s.profile_photo))
+    }
+    // tutor photo wins when a user shows up in both tables (mid-onboarding).
+    for (const t of tutorPhotos ?? []) {
+      if (t.profile_photo) photoMap.set(t.user_id, toPhotoUrl(t.profile_photo))
+    }
+  }
+
   const candidateSet = new Set(candidateIds)
   const enriched = (sessions ?? []).map((s) => ({
     ...s,
     student_name: nameMap.get(s.student_id) ?? 'Student',
     tutor_name: nameMap.get(s.tutor_id) ?? 'Tutor',
+    student_photo: photoMap.get(s.student_id) ?? null,
+    tutor_photo: photoMap.get(s.tutor_id) ?? null,
     is_tutor: candidateSet.has(s.tutor_id),
   }))
 
