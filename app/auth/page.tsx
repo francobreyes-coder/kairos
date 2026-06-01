@@ -173,7 +173,7 @@ export default function AuthPage() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {"I'm in High School"}
+                {"I'm a parent / high school student"}
               </button>
               <button
                 type="button"
@@ -184,7 +184,7 @@ export default function AuthPage() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {"I'm in College"}
+                {"I'm a college student"}
               </button>
             </div>
 
