@@ -268,15 +268,6 @@ export default function FindTutorsPage() {
               servicePrices: t.servicePrices,
             })
           }
-          onBookConsult={(t) =>
-            setBookingTutor({
-              id: t.userId,
-              name: t.name,
-              services: t.services,
-              servicePrices: t.servicePrices,
-              kind: 'consultation',
-            })
-          }
           onMessage={(t) =>
             router.push(
               `/messages?with=${encodeURIComponent(t.userId)}&name=${encodeURIComponent(t.name)}`,
@@ -300,6 +291,15 @@ export default function FindTutorsPage() {
             tutor={profileTutor}
             isSelf={profileTutor.userId === viewerSelfId}
             onClose={() => setProfileTutor(null)}
+            onMessage={
+              isTutorViewer || profileTutor.userId === viewerSelfId
+                ? undefined
+                : () => {
+                    router.push(
+                      `/messages?with=${encodeURIComponent(profileTutor.userId)}&name=${encodeURIComponent(profileTutor.name)}`,
+                    )
+                  }
+            }
             onBook={
               isTutorViewer
                 ? undefined
@@ -309,6 +309,20 @@ export default function FindTutorsPage() {
                       name: profileTutor.name,
                       services: profileTutor.services,
                       servicePrices: profileTutor.servicePrices,
+                    })
+                    setProfileTutor(null)
+                  }
+            }
+            onBookConsultation={
+              isTutorViewer || !profileTutor.offersFreeConsultation
+                ? undefined
+                : () => {
+                    setBookingTutor({
+                      id: profileTutor.userId,
+                      name: profileTutor.name,
+                      services: profileTutor.services,
+                      servicePrices: profileTutor.servicePrices,
+                      kind: 'consultation',
                     })
                     setProfileTutor(null)
                   }
@@ -636,23 +650,6 @@ export default function FindTutorsPage() {
                       >
                         <MessageCircle className="w-[16px] h-[16px]" />
                       </button>
-                      {tutor.offersFreeConsultation && (
-                        <button
-                          className="btn-book btn-book-consult"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setBookingTutor({
-                              id: tutor.userId,
-                              name: tutor.name,
-                              services: tutor.services,
-                              servicePrices: tutor.servicePrices,
-                              kind: 'consultation',
-                            })
-                          }}
-                        >
-                          FREE CONSULT
-                        </button>
-                      )}
                       <button
                         className="btn-book"
                         onClick={(e) => {

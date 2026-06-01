@@ -97,7 +97,6 @@ interface Props {
   isTutorViewer: boolean
   onOpenProfile: (t: TutorMatch) => void
   onBook: (t: TutorMatch) => void
-  onBookConsult?: (t: TutorMatch) => void
   onMessage?: (t: TutorMatch) => void
   onClearFilters: () => void
   // Active role for the bottom nav. Students get the normal student-style nav.
@@ -121,7 +120,6 @@ export function MobileFindTutors({
   isTutorViewer,
   onOpenProfile,
   onBook,
-  onBookConsult,
   onMessage,
   onClearFilters,
 }: Props) {
@@ -382,11 +380,6 @@ export function MobileFindTutors({
                 onClick={() => onOpenProfile(tutor)}
                 onBook={() => onBook(tutor)}
                 onMessage={onMessage ? () => onMessage(tutor) : undefined}
-                onBookConsult={
-                  onBookConsult && tutor.offersFreeConsultation
-                    ? () => onBookConsult(tutor)
-                    : undefined
-                }
               />
             )
           })
@@ -445,7 +438,6 @@ function TutorCard({
   onClick,
   onBook,
   onMessage,
-  onBookConsult,
 }: {
   tutor: TutorMatch
   photoUrl: string | null
@@ -458,7 +450,6 @@ function TutorCard({
   onClick: () => void
   onBook: () => void
   onMessage?: () => void
-  onBookConsult?: () => void
 }) {
   const baseBg = isFeatured
     ? 'linear-gradient(135deg,#3C1EE0 0%,#7A3AE8 60%,#C93FD8 100%)'
@@ -673,31 +664,6 @@ function TutorCard({
               }}
             >
               <MessageCircle size={18} />
-            </button>
-          )}
-          {onBookConsult && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onBookConsult()
-              }}
-              style={{
-                flex: '0 0 auto',
-                height: 44,
-                padding: '0 14px',
-                borderRadius: 999,
-                border: `1px solid ${isFeatured ? 'rgba(255,255,255,0.45)' : '#7A3AE8'}`,
-                background: isFeatured ? 'rgba(255,255,255,0.18)' : 'white',
-                color: isFeatured ? 'white' : '#7A3AE8',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}
-            >
-              Free Consult
             </button>
           )}
           <button
