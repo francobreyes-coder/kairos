@@ -66,6 +66,7 @@ export function StudentSidebar({
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       padding: '20px 0 24px', flexShrink: 0, zIndex: 10, gap: 4,
       height: '100vh',
+      position: 'sticky', top: 0, alignSelf: 'flex-start',
     }}>
       <Link href="/home" style={{
         width: 40, height: 40, borderRadius: 12, background: GRAD,

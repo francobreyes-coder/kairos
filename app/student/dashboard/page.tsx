@@ -403,7 +403,6 @@ function PanelHome({
             [String(upcoming.length), 'Upcoming sessions'],
             [String(past.length),     'Sessions done'],
             [String(tests.length),    'Practice tests'],
-            [String(conversations.length), 'Conversations'],
           ].map(([n, l]) => (
             <div key={l} style={{
               background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.22)',
